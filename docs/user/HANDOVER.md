@@ -3,30 +3,25 @@
 Filled at the end of every session so the next one starts cold without questions. Replace the contents each time; git history keeps the old ones.
 
 **Date:** 2026-09-27
-**Step:** 1 — Repo and backend skeleton
-**Status:** done, awaiting owner review and first commit (not committed)
+**Step:** 2 — PDF parser and chunker
+**Status:** done, awaiting owner review (step 1 committed as `2222cb5`; step 2 uncommitted).
 
 ## Changed
-- `git init -b main`; `.gitignore` (ignores `.env`, `.venv/`, caches, frontend build output, `docs/user/CourseMind_build_plan.md`).
-- `backend/`: venv, pinned `requirements.txt` (fastapi 0.141.1, uvicorn[standard] 0.54.0, python-dotenv 1.2.3) and `requirements-dev.txt` (pytest 9.1.1, httpx 0.28.1), `.python-version`, `.env.example`, `pytest.ini`.
-- `app/config.py` (env vars, fixed ids, limits, refusal, model names; bad `RETRIEVAL_MODE` or non-int numbers fail at import), `app/schemas.py` (copied from BACKEND_SCHEMA §8), `app/main.py` (CORS + `GET /health`).
-- `tests/test_api.py::test_health`.
-- Root `README.md`, `CLAUDE.md` (Tier: full, doc locations).
-- Docs: fixed paths/links after the `docs/app` + `docs/user` split (see DECISIONS).
+- Dev test client: `httpx` → `httpx2==2.13.1` (owner approved; see DECISIONS). The Starlette warning is gone.
+- New deps pinned: `pypdfium2==5.13.0`, `langchain-text-splitters==1.1.2` (runtime); `fpdf2==2.8.8` (dev, builds test PDFs in code).
+- `app/parsing.py`: `Section(location, order, text)`, `Chunk(location, order, chunk_index, text)`, `parse_pdf(path)` (one section per page, `p. {n}`, `\r\n` → `\n`, closes each page after reading), `chunk_sections(sections, size, overlap)` (splits each section separately, drops whitespace-only pieces, `chunk_index` sequential across the document).
+- `tests/test_parsing.py`: 5 tests (3 pages → `p. 1`–`p. 3`; long page → several chunks, all `p. 2`, none over `size`; chunks never cross sections; blank PDF → 0 chunks; whitespace-only section → 0 chunks).
 
 ## Verified
-- `pytest -q` → `1 passed`.
-- `curl localhost:8000/health` → `{"status":"ok"}`; `/docs` → 200; OpenAPI lists `/health` only.
-- CORS preflight from `http://localhost:3000` allowed with `X-Workspace-Id`; unknown origin → 400.
-- `git status` does not list `.env`, `.venv/`, or the build plan (`git check-ignore` confirms).
+- `pytest -q` → `6 passed`, no warnings.
+- Real PDFs: `shared-mime-info-spec.pdf` → 19 pages, 70 chunks, 28 ms; `foo2zjs manual.pdf` → 93 pages, 242 chunks, 67 ms. Page texts and mid-document chunks read correctly (local machine, not Render).
 
 ## Pending
-- Owner OK, then first commit: `chore: repo and backend skeleton`.
-- Test warning: Starlette 1.7 says "Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead." Swapping `httpx` for `httpx2` in `requirements-dev.txt` is a dependency change, so it needs owner approval.
+- Owner OK, then commit: `feat: PDF parser and chunker`.
 - Secrets (`GROQ_API_KEY`, `QDRANT_*`) are not required at startup yet. Add a fail-fast check when steps 6 and 8 start using them.
 
 ## Known issues
-- None besides the httpx deprecation warning.
+- None.
 
 ## Next step
-- Step 2 — PDF parser and chunker (adds `pypdfium2`, `langchain-text-splitters`, dev `fpdf2`). Starts only after owner review.
+- Step 3 — Word and PowerPoint parsers (adds `python-docx`, `python-pptx`). Starts only after owner review.

@@ -10,3 +10,4 @@ node_modules/
 out/
 # private planning doc (never public, see CONSTRAINTS)
 docs/user/CourseMind_build_plan.md
+.CLAUDE.md

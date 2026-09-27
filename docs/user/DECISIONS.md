@@ -26,3 +26,10 @@ One entry per decision made during the build, newest at the bottom. Decisions ma
 **Decision:** Add `backend/pytest.ini` with `pythonpath = .`.
 **Why:** One line of config. No `conftest.py` hacks and no package install. Later steps can register the `live` marker in the same file.
 **Affects:** `backend/pytest.ini`, ARCHITECTURE.
+
+## 2026-09-27 — httpx2 for the test client
+**Context:** Starlette 1.7's `TestClient` warns "Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead." It imports `httpx2` first and falls back to `httpx`.
+**Decision:** Replace `httpx` with `httpx2==2.13.1` in `requirements-dev.txt` (owner approved).
+**Why:** Removes the deprecation warning and follows Starlette's supported path.
+**Note:** `httpx` is still installed as a transitive dependency of `langchain-core` (via `langchain-text-splitters`). That is expected; it is no longer pinned directly.
+**Affects:** `backend/requirements-dev.txt`.
