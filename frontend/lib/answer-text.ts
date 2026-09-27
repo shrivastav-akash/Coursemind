@@ -1,23 +1,27 @@
 // Turns the streamed answer into blocks for display. Parsed from the whole accumulated text on
 // every update, because citation markers arrive split across pieces ("[", "1", "]").
-// ponytail: a small Markdown subset (paragraphs, lists, **bold**, *emphasis*, `code`); a Markdown library if answers need more.
+// ponytail: a small Markdown subset (paragraphs, lists, **bold**, *emphasis*, `code`, ``` blocks); a Markdown library if answers need more.
 
 export type Inline = { text: string; bold?: boolean; code?: boolean } | { cite: number };
-export type Block = { kind: "p"; inlines: Inline[] } | { kind: "ul" | "ol"; items: Inline[][] };
+export type Block = { kind: "p"; inlines: Inline[] } | { kind: "ul" | "ol"; items: Inline[][] } | { kind: "code"; text: string };
 
 const LIST_ITEM = /^\s*(?:([-*•])|(\d+)[.)])\s+(.*)$/;
 const HEADING = /^\s*#{1,6}\s+(.*)$/;
+const FENCE = /^\s*```/;
 // **bold** and *emphasis*; both render as weight 700 (UI_UX_BRIEF §3.2: emphasis is weight, never a second style).
 const EMPHASIS = /\*\*(.+?)\*\*|\*(\S(?:[^*]*\S)?)\*/g;
 // [2], 【2】 (the model sometimes uses full-width brackets), and grouped forms like [1, 2].
 const CITATION = /[[【]\s*(\d+(?:\s*[,，]\s*\d+)*)\s*[\]】]/g;
-// `code` renders in the mono face (UI_UX_BRIEF §3.2); brackets inside it are code, not citations.
+// `code` renders in the mono face (UI_UX_BRIEF §3.2). Code spans are set aside before emphasis and
+// citations are parsed, so `*.swp` or `arr[1]` inside them stay literal.
 const CODE = /`([^`\n]+)`/g;
+const CODE_SLOT = /\u0000(\d+)\u0000/;
 
 export function parseAnswer(text: string, sourceNumbers: ReadonlySet<number>): Block[] {
   const blocks: Block[] = [];
   let paragraph: string[] = [];
   let list: { kind: "ul" | "ol"; items: string[] } | null = null;
+  let fence: string[] | null = null; // lines of an open ``` block; still open while streaming
 
   const flushParagraph = () => {
     if (paragraph.length) blocks.push({ kind: "p", inlines: parseInline(paragraph.join("\n"), sourceNumbers) });
@@ -30,6 +34,21 @@ export function parseAnswer(text: string, sourceNumbers: ReadonlySet<number>): B
 
   for (const raw of text.replace(/\r\n?/g, "\n").split("\n")) {
     const line = raw.trimEnd();
+    if (FENCE.test(line)) {
+      if (fence) {
+        blocks.push({ kind: "code", text: fence.join("\n") });
+        fence = null;
+      } else {
+        flushParagraph();
+        flushList();
+        fence = [];
+      }
+      continue;
+    }
+    if (fence) {
+      fence.push(line);
+      continue;
+    }
     if (!line.trim()) {
       flushParagraph();
       flushList();
@@ -55,29 +74,29 @@ export function parseAnswer(text: string, sourceNumbers: ReadonlySet<number>): B
   }
   flushParagraph();
   flushList();
+  if (fence) blocks.push({ kind: "code", text: fence.join("\n") });
   return blocks;
 }
 
 export function parseInline(text: string, sourceNumbers: ReadonlySet<number>): Inline[] {
+  const codes: string[] = [];
+  const masked = text.replace(CODE, (_, code: string) => `\u0000${codes.push(code) - 1}\u0000`);
   const out: Inline[] = [];
   let last = 0;
-  for (const match of text.matchAll(EMPHASIS)) {
-    pushCode(out, text.slice(last, match.index), false, sourceNumbers);
-    pushCode(out, match[1] ?? match[2], true, sourceNumbers);
+  for (const match of masked.matchAll(EMPHASIS)) {
+    pushCitations(out, masked.slice(last, match.index), false, sourceNumbers);
+    pushCitations(out, match[1] ?? match[2], true, sourceNumbers);
     last = match.index + match[0].length;
   }
-  pushCode(out, text.slice(last), false, sourceNumbers);
-  return out;
-}
-
-function pushCode(out: Inline[], text: string, bold: boolean, sourceNumbers: ReadonlySet<number>) {
-  let last = 0;
-  for (const match of text.matchAll(CODE)) {
-    pushCitations(out, text.slice(last, match.index), bold, sourceNumbers);
-    out.push(bold ? { text: match[1], bold, code: true } : { text: match[1], code: true });
-    last = match.index + match[0].length;
-  }
-  pushCitations(out, text.slice(last), bold, sourceNumbers);
+  pushCitations(out, masked.slice(last), false, sourceNumbers);
+  // Put the code spans back, each as its own part.
+  return out.flatMap((part) =>
+    "text" in part
+      ? part.text.split(CODE_SLOT).flatMap((piece, i): Inline[] =>
+          i % 2 ? [{ ...part, text: codes[Number(piece)], code: true }] : piece ? [{ ...part, text: piece }] : [],
+        )
+      : [part],
+  );
 }
 
 function pushCitations(out: Inline[], text: string, bold: boolean, sourceNumbers: ReadonlySet<number>) {
@@ -95,6 +114,6 @@ function pushCitations(out: Inline[], text: string, bold: boolean, sourceNumbers
 function pushText(out: Inline[], text: string, bold: boolean) {
   if (!text) return;
   const prev = out.at(-1);
-  if (prev && "text" in prev && !prev.code && Boolean(prev.bold) === bold) prev.text += text;
+  if (prev && "text" in prev && Boolean(prev.bold) === bold) prev.text += text;
   else out.push(bold ? { text, bold } : { text });
 }

@@ -331,7 +331,7 @@ Before the fix, mobile gzip was 94 with LCP 3.0 s. The uncompressed python serve
 - Suggested questions (`frontend/lib/samples.ts`) appear under "Ask a question about your documents." while every document is a sample, none is uploading, and at least one is Ready. Each one is sent exactly like a typed question; once the thread has a turn they're gone. They're GuardedButtons, so they carry the question-box lock reason if the server drops.
   1. "What is the difference between git revert and git reset --hard?" (all three files cover it)
   2. "How do Git-Flow and GitHub Flow branching strategies differ?" (DOCX §6.2 table)
-  3. "How do I save unfinished work with git stash, and how can git reflog recover a lost commit?" (needs two documents: stash is in all three, the reflog recovery is only in the DOCX §7)
+  3. "How do I save unfinished work with git stash, and how can git reflog recover a lost commit?" (needs two documents: stash is in all three, the reflog recovery is only in the DOCX §7) — **corrected in step 16:** the DOCX alone answers both halves (§5 and §7), so this never needed two documents; replaced by eval q15.
 - Answers now render `inline code` in the mono face (UI_UX_BRIEF §3.2 already specified it; the Git samples made it visible). Brackets inside code stay code, not citations.
 
 **Why:** APP_FLOW J2 and BACKEND_SCHEMA §7. Re-adding rows in place (not moving them to the top) keeps the list still when the samples were already there.
@@ -340,7 +340,7 @@ Before the fix, mobile gzip was 94 with LCP 3.0 s. The uncompressed python serve
 **Verified in a real browser against the Oregon cluster and Groq:**
 - Fresh workspace, then "Try sample documents": toast "Sample documents added.", 3 Sample rows went Queued, Processing, Ready (10 / 25 / 11 passages), and focus moved to "Add files". The suggestions appeared as soon as the first file was Ready.
 - A second click: 200, toast "Sample documents are already in your library.", no duplicate rows, order kept.
-- The two-document suggestion streamed a cited answer from the DOCX (§5, §7) and the PPTX (slide 6). The revert/reset suggestion cited all three files, with code in mono.
+- The stash/reflog suggestion streamed a cited answer from the DOCX (§5, §7) and the PPTX (slide 6) (not a true two-document question; see step 16). The revert/reset suggestion cited all three files, with code in mono.
 - At 375 px: no horizontal scroll, and the suggestion labels wrap at 52 px tall.
 - Backend logs carry ids, counts and timings only. Test documents deleted afterwards; the cluster is left empty.
 - Tests: `npm test` 9/9, `tsc`, `eslint` and the build are clean. Backend `pytest -m "not live"` gives 98 passed (5 new sample tests, including one that parses the committed sample files).
@@ -350,4 +350,80 @@ Before the fix, mobile gzip was 94 with LCP 3.0 s. The uncompressed python serve
 - `backend/app/main.py`, `backend/tests/{test_documents_api,test_parsing,files}.py`
 - `frontend/lib/{api,copy,limits,samples,answer-text,answer-text.test}.ts`
 - `frontend/components/{workspace-provider,library,workspace,answer}.tsx`
+
+## 2026-09-27 — Evaluation and tuning (step 16)
+**Decision:** Defaults are now `RETRIEVAL_MODE=hybrid`, `CHUNK_SIZE=400` and `TOP_K=4` (overlap stays 100). `SECOND_DOC_RATIO` stays 0.95. The rule is kept for `hybrid_rerank` but isn't used by the default mode.
+
+**How the eval was built:**
+- `backend/eval/qa.json` has 15 questions (12 single-answer, 3 two-document) and 3 out-of-scope. Each two-document question lists `parts`, and each part is answered by a different file, so no single file answers the whole question. Locations are drafted by Claude from the parsed text; **the owner still needs to check them.**
+- The first draft copied the documents' own wording. That run was saturated: nearly every question ranked 1st in every mode, and the ratio sweep changed nothing. The questions were rewritten the way a student asks: 10 paraphrased without the command name, and 2 naming commands (the app's suggested questions). Only the rewritten set's results are reported.
+- `backend/eval/run_eval.py` (TRD §11) builds `eval_400` / `eval_700` / `eval_1000`, asks each question once per mode, and scores every k and ratio from the same ranked candidates. `--refusal` adds 3 Groq calls. It writes `eval/results.md`. About 1 minute; temporary collections are deleted.
+
+**Results (final run, `eval/results.md`):**
+
+| Size | Mode | hit@4 | MRR@6 | Both@4 |
+|---|---|---|---|---|
+| 400 | dense | 15/15 | 0.967 | 2/3 |
+| 400 | hybrid | 15/15 | 0.956 | 3/3 |
+| 400 | hybrid_rerank | 15/15 | 0.956 | 3/3 |
+| 700 | hybrid | 15/15 | 0.889 | 3/3 |
+| 700 | hybrid_rerank | 14/15 | 0.911 | 3/3 |
+| 1000 | hybrid | 15/15 | 0.956 | 3/3 |
+| 1000 | hybrid_rerank | 14/15 | 0.889 | 2/3 |
+
+- **Refusal check:** 3/3 refused (`openai/gpt-oss-20b`, 400 / hybrid / k 4).
+- **Latency:** mean retrieval 260–370 ms in every row, measured from the developer machine to us-west-2. Differences between modes are smaller than the run-to-run variation.
+- **Run-to-run noise:** collections are rebuilt each run, and near-equal scores can swap. In three identical runs, only `1000 hybrid` q11 moved (rank 1 to 2, MRR 0.956 to 0.922, then back). One question of difference is noise.
+
+**Crowding check (one-off, files not in the repo):**
+- Setup: the step 10 case, the 70-page shared-mime-info spec PDF (123 / 70 / 50 chunks) plus the 3-section OS notes .docx, with 3 two-topic questions.
+- "Both documents in the top 4":
+  - `dense`: 1/3, 1/3, 2/3 (sizes 400 / 700 / 1000);
+  - `hybrid`: 3/3 at every size;
+  - `hybrid_rerank`: 2/3 with the rule off and 3/3 with any ratio from 0.90 to 0.97.
+- The small document's best re-ranked passage scored 0.976–0.978 of the leader, or was itself the leader.
+
+**Why:**
+- **Mode.** The rule is hit@4, then Both@4 (PRD FR-12), then MRR@6; a tie goes to the smaller k and the cheaper mode. `dense` fails the two-document questions (Both@4 2/3). `hybrid_rerank` never beats `hybrid`: it ties at 400 and is one question worse at 700 and 1000.
+  - ColBERT scores are nearly flat on these short technical passages; the top 6 sit within 1% (for example 24.90 down to 24.76). So it barely separates passages, and it dropped the cherry-pick section (q12) at 700 and 1000.
+  - `hybrid` also keeps both documents in the crowding case without the second-document rule.
+  - Latency is equal, so the cheaper mode wins.
+- **Chunk size.** `400 hybrid` and `1000 hybrid` tie on every quality column. 400 wins on cost:
+  - 4 passages of 400 characters are about 400 prompt tokens against about 1,000 at 1000, and Groq's daily token cap is the demo's scarcest limit (TRD §16);
+  - 1000 is also at MiniLM's ~256-token input limit.
+  - The price: about 60% more stored chunks than 1000 (65 vs 40 for the samples) against the 30,000-chunk cap.
+- **TOP_K.** 4, not 2: hit@2 is 14/15 and the two-document questions need 4 slots.
+- **Ratio.** 0.95 stays: every ratio from 0.90 to 0.97 gave identical results in both checks.
+
+**Alternatives:**
+- Keep `hybrid_rerank` as designed (TRD §8.2). It isn't better on any measurement here, and the default can be switched back with one env var if a larger eval shows it helps.
+- A chunk size of 1000: equal quality, more Groq tokens per question.
+- Growing the eval with unrelated documents: that would change the TRD §11 design, so it wasn't done without asking.
+
+**Also changed:**
+- `store.py`, refactor inside the module; routes and the `retrieve` call used by `/ask` are unchanged:
+  - `create_chunks_collection(name)`;
+  - `upsert_chunks(collection, …)`;
+  - `search()` returns the ranked candidates;
+  - `with_second_document(points, k, ratio)` (was `_with_second_document`);
+  - `retrieve(…, collection=CHUNKS)`.
+- Suggested question 3 is now eval q15 (.gitignore in subfolders + keeping `.env` out), a real two-document question. Checked in the browser on the new defaults: 3 samples Ready (17 / 37 / 11 = 65 passages); the answer cited DOCX § 11 and PDF p. 2.
+- Answer parser:
+  - Code spans are set aside before emphasis and citations, so `` `*.swp` `` stays code.
+  - Fenced ``` blocks render as code blocks (monospace, scrolling inside the block; the page doesn't widen).
+  - Both bugs were found in that answer.
+
+**Observed, not fixed:** that answer also suggested an uncited pattern (`*/.env`) and a rule-override remark that the sources don't contain. This is a claim beyond the sources. Fixing it means changing the TRD §8.3 prompt, so it is for the owner.
+
+**Verified:**
+- Tests:
+  - `pytest -m "not live"`: 98 passed.
+  - Live Qdrant tests (`test_store_live`, `test_ingest_live`): 8 passed.
+  - `npm test`: 10/10; `tsc`, `eslint` and the build are clean.
+- The cluster is left with only `chunks` and `documents`, 0 chunks.
+
+**Affects:**
+- `backend/app/{store,config}.py`, `backend/.env.example`
+- `backend/eval/{qa.json,run_eval.py,results.md}`, `backend/tests/test_store.py`
+- `frontend/lib/{samples,answer-text,answer-text.test}.ts`, `frontend/components/answer.tsx`
 

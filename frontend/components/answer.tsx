@@ -134,6 +134,14 @@ function AnswerText({
             </p>
           );
         }
+        if (block.kind === "code") {
+          return (
+            <pre key={b} className="overflow-x-auto rounded-lg bg-muted px-3 py-2 font-mono text-[0.9em]">
+              <code>{block.text}</code>
+              {last && <Caret />}
+            </pre>
+          );
+        }
         const List = block.kind === "ol" ? "ol" : "ul";
         return (
           <List key={b} className={cn("flex flex-col gap-1 pl-6", block.kind === "ol" ? "list-decimal" : "list-disc")}>

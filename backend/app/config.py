@@ -15,15 +15,16 @@ def _list(name: str, default: str) -> list[str]:
 
 
 # Environment (TRD §5). Secrets stay empty until the steps that use them.
+# CHUNK_SIZE, TOP_K and RETRIEVAL_MODE defaults come from the step 16 eval (eval/results.md, DECISIONS).
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 LLM_MODELS = _list("LLM_MODELS", "openai/gpt-oss-20b,openai/gpt-oss-120b")
 QDRANT_URL = os.getenv("QDRANT_URL", "")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
-CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "700"))
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "400"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
 TOP_K = int(os.getenv("TOP_K", "4"))
 PREFETCH_K = int(os.getenv("PREFETCH_K", "20"))
-RETRIEVAL_MODE: RetrievalMode = os.getenv("RETRIEVAL_MODE", "hybrid_rerank")  # type: ignore[assignment]  # checked below
+RETRIEVAL_MODE: RetrievalMode = os.getenv("RETRIEVAL_MODE", "hybrid")  # type: ignore[assignment]  # checked below
 ALLOWED_ORIGINS = _list("ALLOWED_ORIGINS", "http://localhost:3000")
 
 # Fail at startup, not on the first request.
@@ -46,9 +47,10 @@ UPLOAD_LIMIT = (30, 3600)
 
 REFUSAL = "I couldn't find that in your notes."
 
-# A second document's best re-ranked passage joins the top k when it scores at least this share of
-# the leader (store._with_second_document). ponytail: set from 5 questions in the step 10 check
-# (relevant 0.97-0.98, unrelated 0.90-0.93); tune on the step 16 eval.
+# hybrid_rerank only: a second document's best re-ranked passage joins the top k when it scores at
+# least this share of the leader (store.with_second_document). Relevant second documents scored
+# 0.97-0.98 in steps 10 and 16, unrelated ones 0.90-0.93 in step 10; every ratio from 0.90 to 0.97
+# gave the same step 16 results, so 0.95 stays.
 SECOND_DOC_RATIO = 0.95
 
 # Qdrant Cloud Inference models (BACKEND_SCHEMA §4).

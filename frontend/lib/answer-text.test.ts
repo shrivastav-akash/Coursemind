@@ -95,6 +95,30 @@ test("inline code keeps its brackets and asterisks literal, inside bold too", ()
     { text: "Recovering with ", bold: true },
     { text: "git reflog", bold: true, code: true },
   ]);
+  // Asterisks inside code are not emphasis (.gitignore patterns).
+  assert.deepEqual(parseInline("Add `/logs/*`, `/tmp`, and `*.swp` [3].", sources), [
+    { text: "Add " },
+    { text: "/logs/*", code: true },
+    { text: ", " },
+    { text: "/tmp", code: true },
+    { text: ", and " },
+    { text: "*.swp", code: true },
+    { text: " " },
+    { cite: 3 },
+    { text: "." },
+  ]);
   // Unclosed while streaming: stays literal until the closing backtick arrives.
   assert.deepEqual(parseInline("Use `git sta", sources), [{ text: "Use `git sta" }]);
+});
+
+test("fenced code blocks keep their lines and are not parsed; an open fence is code while streaming", () => {
+  assert.deepEqual(parseAnswer("Add this [1]:\n\n```\n*.swp\n\n/tmp\n```\nDone.", sources), [
+    { kind: "p", inlines: [{ text: "Add this " }, { cite: 1 }, { text: ":" }] },
+    { kind: "code", text: "*.swp\n\n/tmp" },
+    { kind: "p", inlines: [{ text: "Done." }] },
+  ]);
+  assert.deepEqual(parseAnswer("Try:\n```gitignore\n.env", sources), [
+    { kind: "p", inlines: [{ text: "Try:" }] },
+    { kind: "code", text: ".env" },
+  ]);
 });

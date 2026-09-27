@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 SYSTEM_PROMPT = (
     "You answer questions using ONLY the numbered sources from the student's course documents. "
     "Cite every claim with the source number in square brackets, like [2]. "
+    "Don't add facts, commands, or examples that aren't in the sources. "
     "When sources from different documents are relevant, combine them and cite each. "
     "If the sources answer only part of the question, answer that part and say which part your notes don't cover. "
     f"If the sources contain nothing that answers the question, reply exactly: {config.REFUSAL} "

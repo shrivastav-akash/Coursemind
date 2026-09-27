@@ -47,11 +47,10 @@ def docs(points) -> list[str]:
     return [p.payload["doc_id"] for p in points]
 
 
-def test_second_document_takes_the_last_slot_when_close(monkeypatch):
-    monkeypatch.setattr(store.config, "SECOND_DOC_RATIO", 0.95)
+def test_second_document_takes_the_last_slot_when_close():
     ranked = [point("big", 25.3), point("big", 25.2), point("big", 25.2), point("big", 25.1), point("small", 24.6)]
 
-    assert docs(store._with_second_document(ranked, 4)) == ["big", "big", "big", "small"]
+    assert docs(store.with_second_document(ranked, 4, 0.95)) == ["big", "big", "big", "small"]
 
 
 @pytest.mark.parametrize("ranked, expected", [
@@ -66,4 +65,4 @@ def test_second_document_takes_the_last_slot_when_close(monkeypatch):
     ([point("a", 10), point("b", 9.9)], ["a", "b"]),
 ])
 def test_second_document_rule_leaves_other_cases_alone(ranked, expected):
-    assert docs(store._with_second_document(ranked, 4)) == expected
+    assert docs(store.with_second_document(ranked, 4, 0.95)) == expected

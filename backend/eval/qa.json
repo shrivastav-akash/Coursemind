@@ -1,0 +1,257 @@
+{
+  "about": "Step 16 eval set for backend/samples/. expect = acceptable locations (file name + location label as stored); a hit is any of them in the top k. Two-document questions list parts instead: each part is answered by a different file, and 'both' means every part has one of its locations in the top k. Drafted by Claude from the parsed sample text; locations to be checked by the owner.",
+  "questions": [
+    {
+      "id": "q01",
+      "q": "What is the difference between git revert and git reset --hard?",
+      "expect": [
+        {
+          "doc": "Git Cheat Sheet Presentation.pptx",
+          "location": "slide 8"
+        },
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 9. Undo Operations & Restoring State"
+        },
+        {
+          "doc": "git-cheat-sheet.pdf",
+          "location": "p. 2"
+        }
+      ]
+    },
+    {
+      "id": "q02",
+      "q": "How do Git-Flow and GitHub Flow branching strategies differ?",
+      "expect": [
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 6.2 Branching Strategies Comparison"
+        }
+      ]
+    },
+    {
+      "id": "q03",
+      "q": "How can I put my half-finished changes aside to switch tasks, and get them back later?",
+      "expect": [
+        {
+          "doc": "Git Cheat Sheet Presentation.pptx",
+          "location": "slide 6"
+        },
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 5. Work Preservation (Stashing)"
+        },
+        {
+          "doc": "git-cheat-sheet.pdf",
+          "location": "p. 1"
+        }
+      ]
+    },
+    {
+      "id": "q04",
+      "q": "I accidentally reset my branch and lost a commit. How can I get it back?",
+      "expect": [
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 7. Audit, History Inspection & Reflog"
+        }
+      ]
+    },
+    {
+      "id": "q05",
+      "q": "What is HEAD, and how is it different from a branch?",
+      "expect": [
+        {
+          "doc": "Git Cheat Sheet Presentation.pptx",
+          "location": "slide 2"
+        },
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 1.1 Primary Architecture Elements"
+        },
+        {
+          "doc": "git-cheat-sheet.pdf",
+          "location": "p. 1"
+        }
+      ]
+    },
+    {
+      "id": "q06",
+      "q": "How do I tell Git who I am so my commits show my name?",
+      "expect": [
+        {
+          "doc": "Git Cheat Sheet Presentation.pptx",
+          "location": "slide 3"
+        },
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 2. Setup & System Configuration"
+        },
+        {
+          "doc": "git-cheat-sheet.pdf",
+          "location": "p. 1"
+        }
+      ]
+    },
+    {
+      "id": "q07",
+      "q": "How can I move my feature branch's commits on top of the latest main so the history stays a straight line?",
+      "expect": [
+        {
+          "doc": "Git Cheat Sheet Presentation.pptx",
+          "location": "slide 5"
+        },
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 6.1 Branching Commands"
+        },
+        {
+          "doc": "git-cheat-sheet.pdf",
+          "location": "p. 1"
+        }
+      ]
+    },
+    {
+      "id": "q08",
+      "q": "What is the difference between only downloading remote changes and downloading and merging them?",
+      "expect": [
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 1.2 The 4 Workspace States / Life-Cycle Stages"
+        },
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 10. Remote Repository Synchronization"
+        },
+        {
+          "doc": "git-cheat-sheet.pdf",
+          "location": "p. 2"
+        }
+      ]
+    },
+    {
+      "id": "q09",
+      "q": "How do I stop Git from tracking editor swap files and a temp folder?",
+      "expect": [
+        {
+          "doc": "Git Cheat Sheet Presentation.pptx",
+          "location": "slide 9"
+        },
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 11. Ignoring Files (.gitignore)"
+        },
+        {
+          "doc": "git-cheat-sheet.pdf",
+          "location": "p. 2"
+        }
+      ]
+    },
+    {
+      "id": "q10",
+      "q": "How do I mark a release version with a message and share it with the remote?",
+      "expect": [
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 8. Tagging Releases"
+        },
+        {
+          "doc": "git-cheat-sheet.pdf",
+          "location": "p. 2"
+        }
+      ]
+    },
+    {
+      "id": "q11",
+      "q": "How should I word my commit messages?",
+      "expect": [
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 12.3 Commit Message Etiquette & Industry Best Practices"
+        }
+      ]
+    },
+    {
+      "id": "q12",
+      "q": "How do I bring just one specific commit from another branch into mine?",
+      "expect": [
+        {
+          "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+          "location": "§ 10. Remote Repository Synchronization"
+        }
+      ]
+    },
+    {
+      "id": "q13",
+      "q": "What does resetting a path do to the staging area, and how do I stop tracking a file without deleting it from disk?",
+      "parts": [
+        [
+          {
+            "doc": "git-cheat-sheet.pdf",
+            "location": "p. 1"
+          }
+        ],
+        [
+          {
+            "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+            "location": "§ 4.2 Committing Changes & Removing Files"
+          }
+        ]
+      ]
+    },
+    {
+      "id": "q14",
+      "q": "Besides modified files, what does git status report, and which newer command replaces checkout for switching branches?",
+      "parts": [
+        [
+          {
+            "doc": "git-cheat-sheet.pdf",
+            "location": "p. 1"
+          }
+        ],
+        [
+          {
+            "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+            "location": "§ 6.1 Branching Commands"
+          }
+        ]
+      ]
+    },
+    {
+      "id": "q15",
+      "q": "Does a .gitignore also apply inside subfolders, and how do I keep secret config files like .env out of the repository?",
+      "parts": [
+        [
+          {
+            "doc": "git-cheat-sheet.pdf",
+            "location": "p. 2"
+          },
+          {
+            "doc": "Git Cheat Sheet Presentation.pptx",
+            "location": "slide 9"
+          }
+        ],
+        [
+          {
+            "doc": "Git Commands Architecture and Workflows - Comprehensive Guide.docx",
+            "location": "§ 11. Ignoring Files (.gitignore)"
+          }
+        ]
+      ]
+    }
+  ],
+  "out_of_scope": [
+    {
+      "id": "o1",
+      "q": "How do I use git bisect to find the commit that introduced a bug?"
+    },
+    {
+      "id": "o2",
+      "q": "What is the difference between TCP and UDP?"
+    },
+    {
+      "id": "o3",
+      "q": "How do I set up SSH keys to authenticate with GitHub?"
+    }
+  ]
+}

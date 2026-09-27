@@ -11,7 +11,7 @@ from uuid import uuid5
 from qdrant_client import QdrantClient, models
 
 from app import config
-from app.parsing import chunk_sections, parse
+from app.parsing import Chunk, chunk_sections, parse
 from app.schemas import DocErrorCode, DocType, RetrievalMode, Source, Status
 
 log = logging.getLogger(__name__)
@@ -103,24 +103,30 @@ def ensure_collections() -> None:
     c.create_payload_index(DOCUMENTS, "status", models.PayloadSchemaType.KEYWORD)
 
     if not c.collection_exists(CHUNKS):
-        c.create_collection(
-            CHUNKS,
-            vectors_config={
-                "dense": models.VectorParams(size=384, distance=models.Distance.COSINE),
-                # Only used to re-rank, so no HNSW graph; kept on disk to save RAM on the free cluster.
-                "colbert": models.VectorParams(
-                    size=96,
-                    distance=models.Distance.COSINE,
-                    multivector_config=models.MultiVectorConfig(comparator=models.MultiVectorComparator.MAX_SIM),
-                    hnsw_config=models.HnswConfigDiff(m=0),
-                    on_disk=True,
-                    datatype=models.Datatype.FLOAT16,
-                ),
-            },
-            sparse_vectors_config={"sparse": models.SparseVectorParams(modifier=models.Modifier.IDF)},
-        )
-    c.create_payload_index(CHUNKS, "workspace_id", _tenant_index())
-    c.create_payload_index(CHUNKS, "doc_id", models.PayloadSchemaType.KEYWORD)
+        create_chunks_collection(CHUNKS)
+
+
+def create_chunks_collection(name: str) -> None:
+    """The `chunks` schema (BACKEND_SCHEMA §4); eval/run_eval.py builds its temporary collections with it."""
+    c = client()
+    c.create_collection(
+        name,
+        vectors_config={
+            "dense": models.VectorParams(size=384, distance=models.Distance.COSINE),
+            # Only used to re-rank, so no HNSW graph; kept on disk to save RAM on the free cluster.
+            "colbert": models.VectorParams(
+                size=96,
+                distance=models.Distance.COSINE,
+                multivector_config=models.MultiVectorConfig(comparator=models.MultiVectorComparator.MAX_SIM),
+                hnsw_config=models.HnswConfigDiff(m=0),
+                on_disk=True,
+                datatype=models.Datatype.FLOAT16,
+            ),
+        },
+        sparse_vectors_config={"sparse": models.SparseVectorParams(modifier=models.Modifier.IDF)},
+    )
+    c.create_payload_index(name, "workspace_id", _tenant_index())
+    c.create_payload_index(name, "doc_id", models.PayloadSchemaType.KEYWORD)
 
 
 def sweep_interrupted() -> int:
@@ -229,24 +235,7 @@ def ingest(record: Record, path: Path | str) -> None:
             log.info("ingest %s: no text", doc_id)
             return
         _delete_chunks(workspace_id, doc_id)  # re-processing never mixes old and new passages
-        points = [
-            models.PointStruct(
-                id=str(uuid5(config.ID_NAMESPACE, f"{doc_id}:{c.chunk_index}")),
-                vector={
-                    "dense": models.Document(text=c.text, model=config.DENSE_MODEL),
-                    "sparse": models.Document(text=c.text, model=config.SPARSE_MODEL),
-                    "colbert": models.Document(text=c.text, model=config.COLBERT_MODEL),
-                },
-                payload={
-                    "workspace_id": workspace_id, "doc_id": doc_id, "doc_name": record["name"],
-                    "doc_type": record["type"], "location": c.location, "order": c.order,
-                    "chunk_index": c.chunk_index, "text": c.text,
-                },
-            )
-            for c in chunks
-        ]
-        for batch in batched(points, UPSERT_BATCH):
-            client().upsert(CHUNKS, list(batch), wait=True)
+        upsert_chunks(CHUNKS, workspace_id, doc_id, record["name"], record["type"], chunks)
         set_status(doc_id, "ready", chunks=len(chunks))
         log.info("ingest %s: %d chunks in %.1f s", doc_id, len(chunks), time.perf_counter() - started)
     except Exception:
@@ -258,37 +247,38 @@ def ingest(record: Record, path: Path | str) -> None:
         set_status(doc_id, "failed", error_code="unreadable")
 
 
+def upsert_chunks(
+    collection: str, workspace_id: str, doc_id: str, name: str, doc_type: DocType, chunks: list[Chunk]
+) -> None:
+    """Store chunks with their three vectors, which Qdrant Cloud Inference embeds from the text."""
+    points = [
+        models.PointStruct(
+            id=str(uuid5(config.ID_NAMESPACE, f"{doc_id}:{c.chunk_index}")),
+            vector={
+                "dense": models.Document(text=c.text, model=config.DENSE_MODEL),
+                "sparse": models.Document(text=c.text, model=config.SPARSE_MODEL),
+                "colbert": models.Document(text=c.text, model=config.COLBERT_MODEL),
+            },
+            payload={
+                "workspace_id": workspace_id, "doc_id": doc_id, "doc_name": name, "doc_type": doc_type,
+                "location": c.location, "order": c.order, "chunk_index": c.chunk_index, "text": c.text,
+            },
+        )
+        for c in chunks
+    ]
+    for batch in batched(points, UPSERT_BATCH):
+        client().upsert(collection, list(batch), wait=True)
+
+
 # --- Retrieval -----------------------------------------------------------------------------
 
-def retrieve(question: str, workspace_id: str, ready_ids: list[str], mode: RetrievalMode, k: int) -> list[Source]:
+def retrieve(
+    question: str, workspace_id: str, ready_ids: list[str], mode: RetrievalMode, k: int, collection: str = CHUNKS
+) -> list[Source]:
     """One Qdrant query (TRD §8.2), scoped to the workspace's ready documents in every stage."""
-    if not ready_ids:
-        return []
-    scope = models.Filter(must=[
-        _workspace(workspace_id), models.FieldCondition(key="doc_id", match=models.MatchAny(any=ready_ids)),
-    ])
-    dense = models.Document(text=question, model=config.DENSE_MODEL)
-    if mode == "dense":
-        points = client().query_points(CHUNKS, query=dense, using="dense", query_filter=scope, limit=k).points
-    else:
-        prefetch = [
-            models.Prefetch(query=dense, using="dense", filter=scope, limit=config.PREFETCH_K),
-            models.Prefetch(
-                query=models.Document(text=question, model=config.SPARSE_MODEL), using="sparse",
-                filter=scope, limit=config.PREFETCH_K,
-            ),
-        ]
-        if mode == "hybrid":
-            points = client().query_points(
-                CHUNKS, prefetch=prefetch, query=models.FusionQuery(fusion=models.Fusion.RRF),
-                query_filter=scope, limit=k,
-            ).points
-        else:  # hybrid_rerank: ColBERT MaxSim re-scores the whole union of both candidate lists
-            points = client().query_points(
-                CHUNKS, prefetch=prefetch, query=models.Document(text=question, model=config.COLBERT_MODEL),
-                using="colbert", query_filter=scope, limit=2 * config.PREFETCH_K,
-            ).points
-            points = _with_second_document(points, k)
+    points = search(question, workspace_id, ready_ids, mode, k, collection)
+    if mode == "hybrid_rerank":
+        points = with_second_document(points, k, config.SECOND_DOC_RATIO)
     return [
         Source(
             n=i, doc_id=p.payload["doc_id"], doc_name=p.payload["doc_name"], doc_type=p.payload["doc_type"],
@@ -299,9 +289,41 @@ def retrieve(question: str, workspace_id: str, ready_ids: list[str], mode: Retri
     ]
 
 
-def _with_second_document(points: list[models.ScoredPoint], k: int) -> list[models.ScoredPoint]:
+def search(
+    question: str, workspace_id: str, ready_ids: list[str], mode: RetrievalMode, k: int, collection: str = CHUNKS
+) -> list[models.ScoredPoint]:
+    """Ranked candidates: the top k for dense and hybrid; for hybrid_rerank the whole re-ranked union
+    (2 × PREFETCH_K), which with_second_document cuts to k. The eval scores every k from one call."""
+    if not ready_ids:
+        return []
+    scope = models.Filter(must=[
+        _workspace(workspace_id), models.FieldCondition(key="doc_id", match=models.MatchAny(any=ready_ids)),
+    ])
+    dense = models.Document(text=question, model=config.DENSE_MODEL)
+    if mode == "dense":
+        return client().query_points(collection, query=dense, using="dense", query_filter=scope, limit=k).points
+    prefetch = [
+        models.Prefetch(query=dense, using="dense", filter=scope, limit=config.PREFETCH_K),
+        models.Prefetch(
+            query=models.Document(text=question, model=config.SPARSE_MODEL), using="sparse",
+            filter=scope, limit=config.PREFETCH_K,
+        ),
+    ]
+    if mode == "hybrid":
+        return client().query_points(
+            collection, prefetch=prefetch, query=models.FusionQuery(fusion=models.Fusion.RRF),
+            query_filter=scope, limit=k,
+        ).points
+    # hybrid_rerank: ColBERT MaxSim re-scores the whole union of both candidate lists
+    return client().query_points(
+        collection, prefetch=prefetch, query=models.Document(text=question, model=config.COLBERT_MODEL),
+        using="colbert", query_filter=scope, limit=2 * config.PREFETCH_K,
+    ).points
+
+
+def with_second_document(points: list[models.ScoredPoint], k: int, ratio: float) -> list[models.ScoredPoint]:
     """Top k by re-rank score, except when all k come from one document while another document's
-    best passage scores within SECOND_DOC_RATIO of the leader: then that passage takes the last slot.
+    best passage scores at least `ratio` × the leader: then that passage takes the last slot.
 
     Without this a question spanning two documents loses the smaller one (PRD FR-12). In the step 10
     check a two-topic question filled the top 20 from a 70-chunk PDF although the other document's
@@ -312,6 +334,6 @@ def _with_second_document(points: list[models.ScoredPoint], k: int) -> list[mode
         return top
     leader = top[0].payload["doc_id"]
     other = next((p for p in points[k:] if p.payload and p.payload["doc_id"] != leader), None)
-    if other is None or top[0].score <= 0 or other.score < config.SECOND_DOC_RATIO * top[0].score:
+    if other is None or top[0].score <= 0 or other.score < ratio * top[0].score:
         return top
     return [*top[:-1], other]

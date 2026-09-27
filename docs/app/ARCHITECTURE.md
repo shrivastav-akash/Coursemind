@@ -2,7 +2,7 @@
 
 Living map of the code. **Update this file whenever a folder, module, or connection is added or changes.** Status: `planned` = not built yet, `exists` = in the repo.
 
-_Last updated: 2026-09-27 (step 14: states, accessibility, mobile; Milestone B)_
+_Last updated: 2026-09-27 (step 16: evaluation and tuning)_
 
 ## How the pieces connect
 
@@ -24,7 +24,7 @@ _Last updated: 2026-09-27 (step 14: states, accessibility, mobile; Milestone B)_
 
 **Upload:** browser → `POST /documents` → validate → temp file → 1-worker queue → parse → chunk → upsert text to Qdrant (Qdrant embeds) → record `ready` → browser polls `GET /documents`.
 
-**Ask:** browser → `POST /ask` → one Qdrant query (dense + BM25 → RRF → ColBERT re-rank, filtered to the workspace's ready docs) → prompt → Groq stream → SSE `sources`, `token`…, `done` → browser renders citations.
+**Ask:** browser → `POST /ask` → one Qdrant query (default `hybrid`: dense + BM25 → RRF; `hybrid_rerank` adds a ColBERT re-rank; filtered to the workspace's ready docs) → prompt → Groq stream → SSE `sources`, `token`…, `done` → browser renders citations.
 
 Data shapes and endpoint details: [BACKEND_SCHEMA.md](BACKEND_SCHEMA.md). Design reasons: [TRD.md](TRD.md).
 
@@ -42,15 +42,15 @@ Data shapes and endpoint details: [BACKEND_SCHEMA.md](BACKEND_SCHEMA.md). Design
 | `backend/pytest.ini` | Puts `backend/` on the import path for tests | exists |
 | `backend/.env.example` | Env var names, no secrets | exists |
 | `backend/app/parsing.py` | Type detection, parsers, chunking | exists: `detect_type`, `parse`, `parse_pdf`, `parse_docx`, `parse_pptx`, `chunk_sections`, `UploadError` |
-| `backend/app/store.py` | Qdrant collections, registry, ingest, retrieval, delete | exists: `ensure_ready`, `ping`, `ensure_collections`, `sweep_interrupted`, registry CRUD, `count_documents`, `count_chunks`, `ingest`, `retrieve` (3 modes), `delete_document` |
+| `backend/app/store.py` | Qdrant collections, registry, ingest, retrieval, delete | exists: `ensure_ready`, `ping`, `ensure_collections`, `create_chunks_collection`, `sweep_interrupted`, registry CRUD, `count_documents`, `count_chunks`, `ingest`, `upsert_chunks`, `retrieve` (3 modes; `search` + `with_second_document`), `delete_document` |
 | `backend/app/llm.py` | Prompt, Groq streaming, rate-limit handling | exists: `build_prompt`, `stream_answer` → `(model, pieces)`, `LLMError(code)`, daily-exhausted flags |
 | `backend/tests/` | Offline tests + `live`-marked tests | exists: `test_api.py`, `test_parsing.py`, `test_store.py`, `test_llm.py`, `test_documents_api.py` (routes with an in-memory fake store), `test_ask_api.py` (SSE with faked store + LLM), `test_store_live.py`, `test_ingest_live.py`, `test_llm_live.py` (`live` marker, skipped without the service's settings); `files.py` shared test-file builders |
 | `backend/scripts/spike_qdrant.py` | One-off performance spike (`python -m scripts.spike_qdrant`) | exists |
 | `backend/samples/` | 3 sample files on Git (PDF 2 pages, PPTX 11 slides, DOCX 22 sections), provided by the owner | exists |
-| `backend/eval/` | `qa.json`, `run_eval.py`, `results.md` | planned (step 16) |
+| `backend/eval/` | `qa.json` (15 questions, 3 two-document, 3 out-of-scope), `run_eval.py` (`python -m eval.run_eval [--refusal]`: temporary `eval_{size}` collections, grid, ratio sweep, refusal check), `results.md` (generated) | exists |
 | `frontend/app/` | `layout.tsx` (fonts, viewport, TooltipProvider, Toaster, returning-visitor inline script), `not-found.tsx` (S13 404), `page.tsx` (renders `Workspace`), `globals.css` (UI_UX_BRIEF tokens incl. `--scrim`, animations, global focus ring, first-visit hiding) | exists |
 | `frontend/components/` | `workspace-provider.tsx` (client state: health, library, uploads, polling, delete dialog, drag and drop, announcements), `workspace.tsx` (layout), `app-header.tsx` (status + mobile sheet), `server-banner.tsx`, `library.tsx`, `first-visit.tsx`, `question-box.tsx` (draft, counter, Enter/Shift+Enter, send/Stop), `guarded-button.tsx`, `file-name.tsx`; `thread-provider.tsx` (turns, streaming, stop, retry, answer errors), `thread.tsx`, `answer.tsx` (progress, parsed answer, citations, sources); shadcn `ui/` | exists |
-| `frontend/lib/` | `api.ts` (typed calls, `ApiError`, `ask()` SSE reader), `answer-text.ts` (+ `answer-text.test.ts`, `npm test` via `node --test`), `workspace.ts` (UUID v4 in localStorage), `copy.ts` (APP_FLOW §5 strings), `types.ts`, `limits.ts`, `format.ts`, `utils.ts`, `samples.ts` (3 suggested questions for the sample files) | exists |
+| `frontend/lib/` | `api.ts` (typed calls, `ApiError`, `ask()` SSE reader), `answer-text.ts` (Markdown subset incl. `code` and ``` blocks; + `answer-text.test.ts`, `npm test` via `node --test`), `workspace.ts` (UUID v4 in localStorage), `copy.ts` (APP_FLOW §5 strings), `types.ts`, `limits.ts`, `format.ts`, `utils.ts`, `samples.ts` (3 suggested questions for the sample files) | exists |
 | `frontend/.env.example` | `NEXT_PUBLIC_API_URL` (baked in at build; default `http://localhost:8000`) | exists |
 | `frontend/netlify.toml` | Build settings | planned (step 17) |
 | `.claude/launch.json` | Local preview servers: `frontend-static` (`frontend/out` on :3000), `backend` (uvicorn on :8000) | exists |
