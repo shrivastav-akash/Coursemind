@@ -352,6 +352,7 @@ Before the fix, mobile gzip was 94 with LCP 3.0 s. The uncompressed python serve
 - `frontend/components/{workspace-provider,library,workspace,answer}.tsx`
 
 ## 2026-09-27 — Evaluation and tuning (step 16)
+> **Partly superseded the same day** by "Step 16 follow-up" below. The eval scored location only, which favoured 400-character chunks. The defaults are now `hybrid` / 700 / 4.
 **Decision:** Defaults are now `RETRIEVAL_MODE=hybrid`, `CHUNK_SIZE=400` and `TOP_K=4` (overlap stays 100). `SECOND_DOC_RATIO` stays 0.95. The rule is kept for `hybrid_rerank` but isn't used by the default mode.
 
 **How the eval was built:**
@@ -426,4 +427,87 @@ Before the fix, mobile gzip was 94 with LCP 3.0 s. The uncompressed python serve
 - `backend/app/{store,config}.py`, `backend/.env.example`
 - `backend/eval/{qa.json,run_eval.py,results.md}`, `backend/tests/test_store.py`
 - `frontend/lib/{samples,answer-text,answer-text.test}.ts`, `frontend/components/answer.tsx`
+
+## 2026-09-27 — Step 16 follow-up: evidence scoring, prompt sentence, PRD FR-11 (owner approved)
+**Context:**
+- The owner approved adding the prompt sentence and updating the TRD.
+- Checking the prompt showed the `.gitignore` question answered "the notes don't cover `.env`", although DOCX § 11 does.
+- At 400 characters, § 11 splits into two chunks, and the retrieved one lacks `.env`. The eval still scored a hit, because it matched the location label only.
+- That scoring favours small chunks (any chunk of the right page or section counts), so the step 16 choice of 400 was an artefact.
+
+**Decision:**
+1. **Evidence scoring.**
+   - `qa.json` locations can carry `has` phrases. A hit needs the location and one phrase in the passage, ignoring case and whitespace. Phrases were added where other chunks of the location hold unrelated text: PDF pages and long sections.
+   - Two-document `parts` are objects `{expect, has}`.
+   - Every phrase is checked to occur in its location's text. `tests/test_eval.py` covers the matching (offline).
+2. **Defaults** (owner choice among the options offered): `RETRIEVAL_MODE=hybrid`, `CHUNK_SIZE=700`, `TOP_K=4`.
+   - With evidence scoring, `400 hybrid` misses a two-document question (Both@4 2/3).
+   - `700 hybrid` and `1000 hybrid` both reach hit@4 15/15 and Both@4 3/3. Their MRR@6 is 0.889 vs 0.889 in one run and 0.889 vs 0.922 in the next; the only difference is q11 at 1000 flipping between rank 1 and 2.
+   - Treated as a tie; 700 uses fewer Groq tokens per question.
+   - `hybrid_rerank` at 700: hit@4 14/15 (q12 at rank 6), Both@4 3/3.
+3. **PRD FR-11 amended.** Re-ranking is a retrieval mode measured in the eval, not a requirement; the default is whatever the eval supports.
+   - TRD §1, §3, §5, §8.2, §11 and §17 were updated to match: default mode, the evidence metric and ranking rule, and a resume bullet without a re-rank claim.
+4. **Prompt (TRD §8.3, `llm.py`):** "Don't add facts, commands, or examples that aren't in the sources." (in commit `197071d`).
+
+**Results (final run, `eval/results.md`):**
+
+| Size | Mode | hit@4 | MRR@6 | Both@4 |
+|---|---|---|---|---|
+| 400 | hybrid | 15/15 | 0.878 | 2/3 |
+| 700 | dense | 15/15 | 0.911 | 2/3 |
+| 700 | **hybrid** | 15/15 | 0.889 | 3/3 |
+| 700 | hybrid_rerank | 14/15 | 0.911 | 3/3 |
+| 1000 | hybrid | 15/15 | 0.922 | 3/3 |
+
+- Refusal check: 3/3 on 700 / hybrid / 4.
+
+**Prompt check** (same sources, old vs new prompt, `gpt-oss-20b`, 400-character chunks before the switch):
+- q01 and q13: equivalent answers.
+- q15: both prompts said `.env` isn't covered (the passage lacked it).
+- 3 out-of-scope questions: all refused.
+- Neither prompt repeated the earlier `*/.env` invention.
+- On 700 / hybrid, q15 now retrieves the § 11 passage with `.env` and answers both parts, citing DOCX § 11 and PDF p. 2.
+- It still added one uncited aside ("unless another .gitignore overrides it in a deeper folder"). The sentence reduces such asides but doesn't remove them, so this remains a known limitation of the 20B model.
+
+**Alternatives:**
+- Keep `hybrid_rerank` to satisfy FR-11 as written (one question lower on hit@4).
+- `hybrid_rerank` at 400 (highest re-rank hit@4, but misses the two-document question).
+
+**APP_FLOW (owner approved):** the traceability row for FR-11 now reads "Hybrid search (re-rank as a measured mode)".
+**Not changed:** IMPLEMENTATION_PLAN step 2's `.env` block shows `RETRIEVAL_MODE=hybrid_rerank` (historical: what step 2 set up).
+
+**One eval run failed without output** (stdout and stderr had been suppressed); the rerun succeeded. The cause wasn't captured.
+
+**Verified:**
+- `pytest -m "not live"`: 101 passed.
+- Sample `qa.json` phrases are validated against the parsed text.
+- The cluster holds only `chunks` and `documents`.
+
+**Affects:**
+- `backend/app/config.py`, `backend/.env.example`
+- `backend/eval/{qa.json,run_eval.py,results.md}`, `backend/tests/test_eval.py`
+- `docs/app/{PRD,TRD,APP_FLOW}.md`
+
+## 2026-09-27 — Deploy setup (step 17)
+**Decision:**
+- **Render via a Blueprint (`render.yaml` at the repo root)**, applied by the owner from the dashboard.
+  - The Render MCP tool can't set a root directory or health check path. The Blueprint keeps every setting in the repo.
+  - Secrets (`GROQ_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`) are `sync: false`: the dashboard asks the owner for them, so they never pass through code, chat or tool calls.
+- **`PYTHON_VERSION=3.12.3`**, the local version. Render reads `.python-version` only from the repo root; without this, a new service would get Python 3.14.3.
+- **`netlify.toml` at the repo root** with `base = "frontend"`, not in `frontend/` as TRD §4 shows. Netlify reads the file from the root, and `base` points the build at `frontend`. Settings: `npm run build`, publish `out` (Netlify's setting for a static Next.js export), Node 24 LTS.
+- **Names:**
+  - Netlify project `coursemind-app` (`coursemind` was taken; created by Claude, renamed from `coursemind-2jow`).
+  - Render service `coursemind-api`.
+  - `ALLOWED_ORIGINS=https://coursemind-app.netlify.app,http://localhost:3000`.
+  - `NEXT_PUBLIC_API_URL=https://coursemind-api.onrender.com` is a Netlify environment variable (builds only), so it can change without a commit.
+- **Render free hours (owner decision):** keep WhatHotel and attendify-backend running and keep CourseMind awake with UptimeRobot every 5 minutes. **Accepted risk:** CourseMind alone uses about 744 of the workspace's 750 free hours a month. If the other two are woken for more than about 6 hours in a month, Render suspends every free service in the workspace until the next month. Alternatives offered: suspend the other two; no 24/7 keep-alive (about 1 minute cold start).
+- **`X-Forwarded-For`:**
+  - `client_ip` uses the first entry.
+  - Render staff say they set the first entry to the real client IP, while an older user report says Render only appends.
+  - To be verified live: 6 `/ask` calls from one machine, each with a different forged `X-Forwarded-For`, must still hit the 5-per-minute limit. A fresh workspace answers 409 before any LLM call, so the test costs nothing.
+
+**Checked before deploy:**
+- No `.env` file, private plan or real key value anywhere in git history. The history was scanned for the actual `.env` values; only key names were printed.
+- The repo is public, and `main` matches `origin`.
+- No `~/.claude/DEPLOY_CHECKLIST.md` exists, so TRD §12 and §13 served as the checklist.
 

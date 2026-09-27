@@ -1,0 +1,9 @@
+# Netlify build for the static frontend (TRD §12). NEXT_PUBLIC_API_URL (the Render URL) is set
+# as a Netlify environment variable; it is baked into the JavaScript at build time.
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "out" # relative to base: the static export (next.config.ts output: "export")
+
+[build.environment]
+  NODE_VERSION = "24" # Node LTS; Next.js 16 needs 20.9 or later

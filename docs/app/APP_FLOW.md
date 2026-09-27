@@ -305,7 +305,7 @@ Every PRD feature appears in at least one journey.
 | FR-8 Delete document and passages | J7 |
 | FR-9 Try sample documents | J1, J2 |
 | FR-10 Question 3–500 chars, all Ready docs | J4, J10 |
-| FR-11 Hybrid search + re-rank | J4 (step 3–4, invisible to user), J13 (measured) |
+| FR-11 Hybrid search (re-rank as a measured mode) | J4 (step 3–4, invisible to user), J13 (measured) |
 | FR-12 Grounded, cited, multi-document answers | J4, J5 |
 | FR-13 Streaming + source list | J4 |
 | FR-14 Refusal; prompt to upload when nothing Ready | J6, J4 |

@@ -3,45 +3,30 @@
 Filled at the end of every session so the next one starts cold without questions. Replace the contents each time; git history keeps the old ones.
 
 **Date:** 2026-09-27
-**Step:** 16 — Evaluation and tuning (Phase 4)
-**Status:** done, awaiting owner review (not committed)
+**Step:** 17 — Deploy (in progress: config ready, waiting on owner actions)
+**Status:** not committed. The step 16 follow-up (evidence scoring, 700 defaults, PRD / TRD / APP_FLOW) and the deploy config are all uncommitted.
 
 ## Changed
-- `backend/eval/`:
-  - `qa.json` (15 questions, 3 two-document with per-part locations, 3 out-of-scope);
-  - `run_eval.py` (grid + ratio sweep + `--refusal`);
-  - `results.md` (generated from the final run).
-- New defaults: `RETRIEVAL_MODE=hybrid`, `CHUNK_SIZE=400`, `TOP_K=4`; `SECOND_DOC_RATIO` stays 0.95. Reasons and numbers are in DECISIONS (step 16).
-- `store.py` refactored so the eval reuses production code; the routes are unchanged.
-- Suggested question 3 is now a real two-document question (eval q15).
-- Answers render `*` inside code correctly, and fenced ``` blocks render as code blocks.
+- `render.yaml` (Blueprint for `coursemind-api`) and `netlify.toml` (base `frontend`), both at the repo root.
+- Netlify project `coursemind-app` created. Env `NEXT_PUBLIC_API_URL=https://coursemind-api.onrender.com` (builds). Not linked to GitHub yet.
 
-## Verified
-- Final eval: `400 hybrid` scored hit@4 15/15, MRR@6 0.956, Both@4 3/3. Refusal check 3/3.
-- Crowding check (step 10 files): `hybrid` kept both documents 3/3 at every size.
-- Browser on the new defaults: 3 samples Ready (65 passages); the two-document suggestion cited DOCX § 11 and PDF p. 2.
-- Tests:
-  - Backend: `pytest -m "not live"` 98 passed; live Qdrant tests 8 passed.
-  - Frontend: `npm test` 10/10; `tsc`, `eslint` and the build are clean.
-- Cluster left empty.
+## Owner actions (in order)
+1. Commit and push: step 16 follow-up + deploy config.
+2. **Render:** Dashboard → New → Blueprint → repo `shrivastav-akash/Coursemind`. Enter `GROQ_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY` when asked → Apply. If the URL isn't `https://coursemind-api.onrender.com`, tell Claude (the Netlify env var must match).
+3. **Netlify:** app.netlify.com/projects/coursemind-app → Project configuration → Build & deploy → Link repository → GitHub → `shrivastav-akash/Coursemind`, branch `main`. Build settings come from `netlify.toml`.
+4. **UptimeRobot**, once `/health` is green: HTTP(s) monitor on `https://coursemind-api.onrender.com/health`, every 5 minutes.
 
-## Pending
-- **Owner:**
-  - Check the expected locations in `backend/eval/qa.json`, then re-run `.venv/bin/python -m eval.run_eval --refusal` from `backend/`.
-  - Confirm `git-cheat-sheet.pdf` may be published before the repo goes public.
-- **Owner decision:** answers sometimes add uncited claims beyond the sources (seen: a `*/.env` pattern). The fix is one prompt sentence, but TRD §8.3 holds the approved prompt.
-- **Owner decision:** TRD §5 / §8.2 still say `700` / `hybrid_rerank` as defaults (approved doc); DECISIONS records the change. Update the TRD if you want them to match.
-- The resume bullet (TRD §17) can't claim a re-rank gain. The measured gain is dense to hybrid on two-document questions (Both@4 2/3 to 3/3; crowding 1/3 to 3/3).
-- Step 17 (deploy):
-  - Netlify: set `NEXT_PUBLIC_API_URL` (Netlify serves gzip/brotli).
-  - Render: Oregon region; set env from `.env.example` (new defaults).
-  - Check `X-Forwarded-For`; measure latency from Render.
-- Not triggered live (from steps 14–15): "Couldn't load your documents.", the "delete failed" toast, the 28+ disabled samples button.
-- Commit (owner): suggested `feat: retrieval evaluation and tuned defaults`.
+## Then Claude verifies
+- `/health` is live; CORS from the Netlify origin works.
+- `X-Forwarded-For` spoof test (see DECISIONS).
+- Done-when in a fresh browser: samples, upload, cross-document answer, citation, refusal.
+- Latency from Render (first token, full answer).
+- The Netlify site is public: the project was created with team-login protection reported as on, so check that an anonymous visitor isn't blocked.
 
-## Known issues
-- The eval corpus is small (65 chunks at 400) and the three files overlap heavily. Modes differ by one or two questions, which is within run-to-run noise.
-- Firefox has no `field-sizing: content`, so the question box stays one line and scrolls there.
+## Known issues / risks
+- Render free hours are shared with WhatHotel and attendify-backend (owner accepted the risk; see DECISIONS).
+- Small eval corpus; modes differ within noise.
+- Firefox has no `field-sizing: content`.
 
 ## Next step
-- Phase 5, step 17 — Deploy. **Owner first:** create the public GitHub repo and the Render, Netlify and UptimeRobot accounts.
+- Finish step 17 verification, then step 18 (README and results).

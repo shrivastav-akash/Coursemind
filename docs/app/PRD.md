@@ -54,7 +54,7 @@ Course material is spread across lecture PDFs, slide decks, and Word notes. Find
 
 **Question answering**
 - FR-10 Accept a question of 3–500 characters. Search across all Ready documents in the workspace.
-- FR-11 Retrieval combines keyword search and semantic search, then re-ranks the candidates; the top-k passages go to the model.
+- FR-11 Retrieval combines keyword search and semantic search; the top-k passages go to the model. Re-ranking the candidates is available as a retrieval mode and measured in the evaluation (FR-16); the default is whichever the evaluation supports (amended 2026-09-27, see DECISIONS).
 - FR-12 The answer uses only those passages, cites document + location for each claim, and combines passages from different documents when relevant.
 - FR-13 Stream the answer to the UI as it is generated; return the list of source passages with it.
 - FR-14 Refusal: if the passages do not contain the answer, reply with the fixed sentence "I couldn't find that in your notes." If the workspace has no Ready documents, prompt the user to upload instead of calling the model.

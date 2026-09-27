@@ -1,0 +1,26 @@
+# Render Blueprint for the CourseMind backend (TRD §12). Apply it from the Render dashboard
+# (New > Blueprint). Variables marked `sync: false` are asked for in the dashboard when the
+# Blueprint is applied, so secrets never live in the repo.
+services:
+  - type: web
+    name: coursemind-api
+    runtime: python
+    region: oregon # same region as the Qdrant cluster (AWS us-west-2)
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # One process: the rate limiter and the ingest queue live in memory (TRD §7.1, §16).
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION # Render reads .python-version only from the repo root, not rootDir
+        value: 3.12.3
+      - key: ALLOWED_ORIGINS # the Netlify site, plus local development
+        value: https://coursemind-app.netlify.app,http://localhost:3000
+      - key: GROQ_API_KEY
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
