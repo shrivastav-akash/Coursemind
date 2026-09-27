@@ -2,7 +2,7 @@
 
 Living map of the code. **Update this file whenever a folder, module, or connection is added or changes.** Status: `planned` = not built yet, `exists` = in the repo.
 
-_Last updated: 2026-09-27 (step 2: PDF parser and chunker)_
+_Last updated: 2026-09-27 (step 3: Word and PowerPoint parsers)_
 
 ## How the pieces connect
 
@@ -41,7 +41,7 @@ Data shapes and endpoint details: [BACKEND_SCHEMA.md](BACKEND_SCHEMA.md). Design
 | `backend/requirements.txt`, `requirements-dev.txt` | Pinned runtime / dev dependencies | exists |
 | `backend/pytest.ini` | Puts `backend/` on the import path for tests | exists |
 | `backend/.env.example` | Env var names, no secrets | exists |
-| `backend/app/parsing.py` | Type detection, parsers, chunking | exists: `parse_pdf`, `chunk_sections` (DOCX/PPTX step 3, type checks step 4) |
+| `backend/app/parsing.py` | Type detection, parsers, chunking | exists: `parse_pdf`, `parse_docx`, `parse_pptx`, `chunk_sections` (type checks step 4) |
 | `backend/app/store.py` | Qdrant collections, registry, ingest, retrieval, delete | planned (steps 6–7) |
 | `backend/app/llm.py` | Prompt, Groq streaming, rate-limit handling | planned (step 8) |
 | `backend/tests/` | Offline tests + `live`-marked tests | exists: `test_api.py`, `test_parsing.py` |

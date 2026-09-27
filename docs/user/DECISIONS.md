@@ -33,3 +33,13 @@ One entry per decision made during the build, newest at the bottom. Decisions ma
 **Why:** Removes the deprecation warning and follows Starlette's supported path.
 **Note:** `httpx` is still installed as a transitive dependency of `langchain-core` (via `langchain-text-splitters`). That is expected; it is no longer pinned directly.
 **Affects:** `backend/requirements-dev.txt`.
+
+## 2026-09-27 — DOCX and PPTX parsing details
+**Context:** TRD §7.2 sets the section rules but not how headings, empty parts, and merged table cells appear in the text.
+**Decision:**
+- A DOCX section's text starts with its heading line, so a chunk from the top of a section carries the heading words.
+- `§ (start)` is emitted only when there is text before the first heading. Headings are whitespace-collapsed in `location`, and `location` is cut to 120 chars (BACKEND_SCHEMA §4).
+- Merged table cells appear once. python-docx repeats a horizontally merged cell per grid column, so repeats are dropped by identity; python-pptx gives covered cells as empty `is_spanned` placeholders, which are skipped. Empty cells that are not merged stay, so columns stay aligned with the header row. Rows with no text are dropped.
+- PPTX: one section per slide even when empty (like PDF pages); the chunker drops empty ones. Soft line breaks (`\v`) become `\n`.
+**Why:** Better retrieval text and correct table rows for the LLM. Verified on LibreOffice-made files as well as python-docx/python-pptx-built ones.
+**Affects:** `backend/app/parsing.py`, `backend/tests/test_parsing.py`.

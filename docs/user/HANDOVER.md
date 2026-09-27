@@ -3,25 +3,29 @@
 Filled at the end of every session so the next one starts cold without questions. Replace the contents each time; git history keeps the old ones.
 
 **Date:** 2026-09-27
-**Step:** 2 — PDF parser and chunker
-**Status:** done, awaiting owner review (step 1 committed as `2222cb5`; step 2 uncommitted).
+**Step:** 3 — Word and PowerPoint parsers
+**Status:** done, awaiting owner review (not committed)
 
 ## Changed
-- Dev test client: `httpx` → `httpx2==2.13.1` (owner approved; see DECISIONS). The Starlette warning is gone.
-- New deps pinned: `pypdfium2==5.13.0`, `langchain-text-splitters==1.1.2` (runtime); `fpdf2==2.8.8` (dev, builds test PDFs in code).
-- `app/parsing.py`: `Section(location, order, text)`, `Chunk(location, order, chunk_index, text)`, `parse_pdf(path)` (one section per page, `p. {n}`, `\r\n` → `\n`, closes each page after reading), `chunk_sections(sections, size, overlap)` (splits each section separately, drops whitespace-only pieces, `chunk_index` sequential across the document).
-- `tests/test_parsing.py`: 5 tests (3 pages → `p. 1`–`p. 3`; long page → several chunks, all `p. 2`, none over `size`; chunks never cross sections; blank PDF → 0 chunks; whitespace-only section → 0 chunks).
+- New deps pinned: `python-docx==1.2.0`, `python-pptx==1.0.2`.
+- `app/parsing.py`: `parse_docx` (body in order, paragraphs + tables; new section at each `Heading*` / `Title`; `§ (start)` for text before the first heading; tables row by row with ` | `), `parse_pptx` (one section per slide; text frames, tables, nested groups, speaker notes as `Notes: …`; `slide {n}`). Merged-cell handling and other details in DECISIONS.
+- `tests/test_parsing.py`: 3 new tests (DOCX headings + table order; DOCX Title + merged cells; PPTX placeholders, soft break, notes, merged table cells, nested groups, empty slide).
 
 ## Verified
-- `pytest -q` → `6 passed`, no warnings.
-- Real PDFs: `shared-mime-info-spec.pdf` → 19 pages, 70 chunks, 28 ms; `foo2zjs manual.pdf` → 93 pages, 242 chunks, 67 ms. Page texts and mid-document chunks read correctly (local machine, not Render).
+- `pytest -q` → `9 passed`.
+- No `.docx` / `.pptx` exist on this machine (home or system paths), so the "real file" check used LibreOffice-made files: an HTML course note → `notes.docx` (4 sections, headings, list, table with a merged cell: correct), and the 19-page system PDF → `spec.pptx` via Impress PDF import (19 slides, 70 chunks, 112 ms, text correct). Probe files deleted afterwards.
+- **Not yet checked:** a real Word/PowerPoint file authored in Microsoft Office. Worth one run when you have one (command below).
+
+```bash
+cd backend && .venv/bin/python -c "import sys; from app.parsing import parse_docx, parse_pptx; p=sys.argv[1]; [print(s.location, '|', s.text[:100].replace(chr(10),' / ')) for s in (parse_docx if p.endswith('.docx') else parse_pptx)(p)]" /path/to/file.pptx
+```
 
 ## Pending
-- Owner OK, then commit: `feat: PDF parser and chunker`.
+- Owner OK, then commit: `feat: Word and PowerPoint parsers`.
 - Secrets (`GROQ_API_KEY`, `QDRANT_*`) are not required at startup yet. Add a fail-fast check when steps 6 and 8 start using them.
 
 ## Known issues
-- None.
+- DOCX text in text boxes, headers, footers, and footnotes is not read (TRD scope is the body). Vertically merged cells repeat their text in each row they span.
 
 ## Next step
-- Step 3 — Word and PowerPoint parsers (adds `python-docx`, `python-pptx`). Starts only after owner review.
+- Step 4 — Upload validation (`detect_type`, `parse` dispatch, `UploadError` codes, ZIP-bomb guard). No new deps. Starts only after owner review.
