@@ -511,3 +511,39 @@ Before the fix, mobile gzip was 94 with LCP 3.0 s. The uncompressed python serve
 - The repo is public, and `main` matches `origin`.
 - No `~/.claude/DEPLOY_CHECKLIST.md` exists, so TRD §12 and §13 served as the checklist.
 
+## 2026-09-28 — Deploy verification, part 1 (step 17)
+**Live:** backend `https://coursemind-api.onrender.com` (commit `7969e15`), frontend `https://coursemind-app.netlify.app`.
+
+**Found and fixed:**
+1. **Rate limits could be bypassed.**
+   - Six `/ask` calls, each with a different forged `X-Forwarded-For`, were never limited. The same six calls without the header gave 429 on the 6th.
+   - Render keeps the client's value in front of the entries its proxies add (`<forged>, <client>, <Cloudflare>, <Render internal>`). So the first entry is forgeable, despite the Render staff note quoted in the deploy-setup entry.
+   - **Fix:** `client_ip` now reads `CF-Connecting-IP`. Cloudflare sets it from the connection it received; a public header dump from a Render service shows it holding the real client. Without the header (local runs), requests are keyed on the socket address, which can only make limits stricter.
+   - The test now checks that a forged `X-Forwarded-For` stays limited and a different `CF-Connecting-IP` doesn't. **To re-test live after the next deploy:** forged `CF-Connecting-IP` and `X-Forwarded-For` must still hit 429 on the 6th call.
+2. **Netlify site returned 401 to anonymous visitors.**
+   - The project was created with team-login protection on for all deploys.
+   - Changed to protect only non-production deploys (previews), so production is public.
+3. **The frontend called `http://localhost:8000`.**
+   - The first `NEXT_PUBLIC_API_URL` upsert (scope "builds" only) reported success but never saved; Netlify listed no variables.
+   - Re-added with all scopes and read back. A rebuild is needed for it to take effect.
+
+**Verified live against the API (fresh workspace, from the developer machine):**
+- Samples: 202.
+- Upload of the 3-section OS notes .docx: 202. All 4 documents Ready in 4.3 s (10 / 25 / 11 / 3 passages).
+- Cross-document question (Banker's algorithm + undoing a commit): sources from both the uploaded notes (§ Handling deadlocks) and the samples (slide 8, § 9); answered.
+- `.gitignore` question: DOCX § 11 + PDF; answered.
+- "TCP vs UDP": the exact refusal sentence, `refused: true`.
+- Latency:
+
+  | | Server-side (Render logs) | Client-side (developer machine) |
+  |---|---|---|
+  | Retrieval | 71–86 ms | |
+  | First piece after the LLM call | 227–257 ms | |
+  | First token | | about 0.54 s |
+  | Full answer | 0.88–1.12 s | 1.2–1.4 s |
+  | Refusal | 0.25 s | |
+
+- CORS: the Netlify origin is allowed (preflight 200, exact origin echoed); a foreign origin gets 400.
+- Logs hold ids, counts and timings only.
+- Test documents deleted.
+
