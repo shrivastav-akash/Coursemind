@@ -43,3 +43,13 @@ One entry per decision made during the build, newest at the bottom. Decisions ma
 - PPTX: one section per slide even when empty (like PDF pages); the chunker drops empty ones. Soft line breaks (`\v`) become `\n`.
 **Why:** Better retrieval text and correct table rows for the LLM. Verified on LibreOffice-made files as well as python-docx/python-pptx-built ones.
 **Affects:** `backend/app/parsing.py`, `backend/tests/test_parsing.py`.
+
+## 2026-09-27 — Upload validation details
+**Context:** BACKEND_SCHEMA §5 has no dedicated code for a ZIP over the 200 MB uncompressed cap, and TRD §7.1 leaves the ZIP-reading failure modes open.
+**Decision:**
+- Over-cap ZIP → `bad_signature` (415). TRD §7.1 groups the size cap with the signature check, and `file_too_large` would show "larger than 25 MB", which is false for a small bomb.
+- The cap uses the declared sizes in the ZIP's central directory. CPython's `zipfile` never inflates an entry past its declared size (`zipfile/__init__.py:1091`), so this also bounds what the parsers can decompress.
+- ZIP index read failures map to `bad_signature`: `BadZipFile` and `NotImplementedError` (raised for an unsupported "version needed" field). Both were found by fuzzing 20,000 corrupted DOCX files.
+- PDF must start with `%PDF-` at byte 0, as specified. Some real PDFs have junk before the header (the PDF spec allows up to 1 KB); if uploads fail on that, widen the check to the first 1,024 bytes.
+**Why:** Keeps the spec's code list unchanged and gives the visitor true error copy.
+**Affects:** `backend/app/parsing.py`, `backend/tests/test_parsing.py`.

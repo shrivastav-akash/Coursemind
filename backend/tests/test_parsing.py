@@ -1,9 +1,15 @@
+import zipfile
+
 import docx
+import pytest
 from fpdf import FPDF
 from pptx import Presentation
 from pptx.util import Inches
 
-from app.parsing import Section, chunk_sections, parse_docx, parse_pdf, parse_pptx
+from app.config import MAX_UNZIPPED_MB
+from app.parsing import (
+    Section, UploadError, chunk_sections, detect_type, parse, parse_docx, parse_pdf, parse_pptx,
+)
 
 
 def make_pdf(path, pages: list[str]):
@@ -138,3 +144,98 @@ def test_pptx_slides_tables_nested_groups_and_notes(tmp_path):
     assert sections[1].text.split("\n") == ["Algorithm | Avoids", "Banker's | safe state | deadlock", "Nested group text"]
     assert sections[2].text == ""
     assert {c.location for c in chunk_sections(sections, size=700, overlap=100)} == {"slide 1", "slide 2"}
+
+
+def make_docx(path):
+    doc = docx.Document()
+    doc.add_paragraph("Some notes.")
+    doc.save(str(path))
+    return path
+
+
+def make_pptx(path):
+    prs = Presentation()
+    prs.slides.add_slide(prs.slide_layouts[6])
+    prs.save(str(path))
+    return path
+
+
+def make_text(path):
+    path.write_text("plain notes, renamed")
+    return path
+
+
+def make_empty(path):
+    path.write_bytes(b"")
+    return path
+
+
+def make_unsupported_zip(path):
+    make_docx(path)
+    data = bytearray(path.read_bytes())
+    entry = data.rfind(b"PK\x01\x02")
+    data[entry + 6] = 99  # "version needed to extract" = 9.9, beyond what zipfile supports
+    path.write_bytes(data)
+    return path
+
+
+def make_zip_bomb(path):
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("word/document.xml", "<w:document/>")
+        z.writestr("bomb.bin", b"0")
+    data = bytearray(path.read_bytes())
+    entry = data.rfind(b"PK\x01\x02")  # central directory record of bomb.bin
+    declared = (MAX_UNZIPPED_MB + 1) * 1024 * 1024
+    data[entry + 24:entry + 28] = declared.to_bytes(4, "little")  # uncompressed-size field
+    path.write_bytes(data)
+    return path
+
+
+@pytest.mark.parametrize("make, filename, expected, first_location", [
+    (lambda p: make_pdf(p, ["Hello"]), "Lecture 1.PDF", "pdf", "p. 1"),
+    (make_docx, "notes.docx", "docx", "§ (start)"),
+    (make_pptx, "deck.PPTX", "pptx", "slide 1"),
+])
+def test_real_files_are_detected_and_parsed(tmp_path, make, filename, expected, first_location):
+    path = make(tmp_path / "upload.tmp")  # temp name differs from the visitor's file name
+
+    doc_type = detect_type(path, filename)
+
+    assert doc_type == expected
+    assert parse(path, doc_type)[0].location == first_location
+
+
+@pytest.mark.parametrize("filename, code", [
+    ("old.doc", "legacy_format"),
+    ("old.PPT", "legacy_format"),
+    ("notes.txt", "unsupported_type"),
+    ("notes.odt", "unsupported_type"),
+    ("notes", "unsupported_type"),
+])
+def test_extension_decides_before_content(tmp_path, filename, code):
+    path = make_pdf(tmp_path / "upload.tmp", ["valid PDF content"])
+
+    with pytest.raises(UploadError) as err:
+        detect_type(path, filename)
+
+    assert err.value.code == code
+
+
+@pytest.mark.parametrize("make, filename", [
+    (make_text, "renamed.pdf"),
+    (make_text, "renamed.docx"),
+    (make_empty, "empty.pdf"),
+    (make_empty, "empty.pptx"),
+    (lambda p: make_pdf(p, ["x"]), "really-a-pdf.docx"),
+    (make_docx, "really-a-docx.pptx"),
+    (make_pptx, "really-a-pptx.docx"),
+    (make_unsupported_zip, "corrupt.docx"),
+    (make_zip_bomb, "bomb.docx"),
+])
+def test_wrong_content_is_bad_signature(tmp_path, make, filename):
+    path = make(tmp_path / "upload.tmp")
+
+    with pytest.raises(UploadError) as err:
+        detect_type(path, filename)
+
+    assert err.value.code == "bad_signature"

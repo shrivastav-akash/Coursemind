@@ -1,3 +1,4 @@
+import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,7 +10,18 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pptx import Presentation
 from pptx.shapes.group import GroupShape
 
+from app.config import MAX_UNZIPPED_MB
+from app.schemas import DocType, ErrorCode
+
 MAX_LOCATION_CHARS = 120  # BACKEND_SCHEMA §4
+DOC_TYPES: dict[str, DocType] = {".pdf": "pdf", ".docx": "docx", ".pptx": "pptx"}
+ZIP_MAIN_PART = {"docx": "word/document.xml", "pptx": "ppt/presentation.xml"}
+
+
+class UploadError(Exception):
+    def __init__(self, code: ErrorCode):
+        super().__init__(code)
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -25,6 +37,38 @@ class Chunk:
     order: int
     chunk_index: int  # 0-based position within the document
     text: str
+
+
+def detect_type(path: Path | str, filename: str) -> DocType:
+    ext = Path(filename).suffix.lower()
+    if ext in (".doc", ".ppt"):
+        raise UploadError("legacy_format")
+    doc_type = DOC_TYPES.get(ext)
+    if doc_type is None:
+        raise UploadError("unsupported_type")
+
+    if doc_type == "pdf":
+        with open(path, "rb") as f:
+            if f.read(5) != b"%PDF-":
+                raise UploadError("bad_signature")
+        return doc_type
+
+    try:
+        with zipfile.ZipFile(path) as z:
+            entries = z.infolist()
+    except (zipfile.BadZipFile, NotImplementedError):  # NotImplementedError: entry needs a ZIP version zipfile lacks
+        raise UploadError("bad_signature") from None
+    if ZIP_MAIN_PART[doc_type] not in {e.filename for e in entries}:
+        raise UploadError("bad_signature")
+    # zipfile never inflates an entry past its declared size, so capping the declared
+    # total also caps what the parsers can decompress (zip-bomb guard).
+    if sum(e.file_size for e in entries) > MAX_UNZIPPED_MB * 1024 * 1024:
+        raise UploadError("bad_signature")
+    return doc_type
+
+
+def parse(path: Path | str, doc_type: DocType) -> list[Section]:
+    return {"pdf": parse_pdf, "docx": parse_docx, "pptx": parse_pptx}[doc_type](path)
 
 
 def parse_pdf(path: Path | str) -> list[Section]:
