@@ -268,3 +268,57 @@ One entry per decision made during the build, newest at the bottom. Decisions ma
 - A broad "explain every section … in detail" question was refused although the notes cover the topic.
 - A long answer claimed most OSes use detection and recovery, which the notes don't say.
 **Affects:** `frontend/lib/{api,answer-text,copy,types}.ts`, `frontend/components/{thread-provider,thread,answer,question-box,workspace}.tsx`, `frontend/app/globals.css`, `frontend/package.json`, `frontend/tsconfig.json`.
+
+## 2026-09-27 — States, accessibility, mobile (step 14) — Milestone B
+**Decision:**
+- **Focus ring:** one unlayered `:focus-visible` rule in `globals.css` (2 px `--ring`, 2 px offset, `box-shadow: none`) replaces shadcn's 3 px translucent ring everywhere. Unlayered CSS outranks Tailwind's layered utilities (`outline-none`, `ring-*`), so no component needed editing. The question box draws the ring on the whole input group, not the textarea.
+- **Touch targets:** `Button` gets `pointer-coarse:min-h-11 min-w-11` (44 px); inline citations keep 24 px via the `evidence` compound variant. Source-row triggers and the "How it works" link get 44 px on touch too.
+- **Reduced motion:** `Spinner` renders `CircleNotch` with `motion-reduce:hidden` and a static `Clock` with `motion-safe:hidden` (UI_UX_BRIEF §3.6). Other motion was already instant via the global rule.
+- **Overlays:** `bg-black/10` → `bg-scrim` (new `--scrim` token, light and dark), per "no raw colours".
+- **Icons:** decorative icons in shadcn's sheet close and scroll button get `aria-hidden`.
+- **Focus after a row disappears** (delete, Remove): moves to the visible "Add files" instead of `<body>`.
+- **404 page:** `app/not-found.tsx` (S13) → `404.html` in the static export.
+- **LCP (measured, then fixed):**
+  - Lighthouse named the first-visit description as the LCP element. It rendered only after hydration, so mobile LCP was 7.2 s from the uncompressed local server and 3.0 s gzipped.
+  - Fix: the static HTML is prerendered as a first visit (`useSyncExternalStore` server snapshot `true`). A first visit (no stored workspace) keeps it; the value is read once at module load.
+  - A returning visit fetches `/documents` alongside `/health`, not after it. An inline `<head>` script sets `data-returning` before first paint, and CSS hides `[data-first-visit]` parts, so returning visitors never glimpse the empty state. `suppressHydrationWarning` is on `<html>` for that attribute.
+**Measured (Lighthouse 13.5, gzip-serving static build as Netlify would, local backend with the page origin allowed):**
+
+| | Performance | Accessibility | Best practices | LCP | CLS | TBT |
+|---|---|---|---|---|---|---|
+| Mobile (simulated slow 4G, 4× CPU) | 98 | 100 | 100 | 2.3 s | 0.001 | 50 ms |
+| Desktop | 100 | 100 | 100 | 0.6 s | 0 | 0 ms |
+| Dark mode (`--force-dark-mode`), accessibility only | — | 100 (contrast pass) | — | — | — | — |
+
+Before the fix, mobile gzip was 94 with LCP 3.0 s. The uncompressed python server gave 76–77 with LCP 6.6–7.2 s, because the 797 KB of JS is 245 KB gzipped. Runs where the page origin wasn't allowed by CORS showed Best practices 96 and CLS 0.054 (server banner); those are test-setup artefacts, re-run clean.
+
+**UI_UX_BRIEF §9 checklist (verified):**
+- **Contrast:** Lighthouse contrast passes in both modes.
+- **Focus ring:** 2 px, 2 px offset, measured on every Tab stop.
+- **Skip link:** first Tab stop.
+- **Status:** icon + text.
+- **Icon-only buttons:** named ("Delete X", "Remove X", "Retry X", "Stop answer", "Send question").
+- **Live regions:** library events, "Answer ready.", `aria-busy` while streaming.
+- **Dialog:** focus starts on Cancel, Tab is trapped, Esc closes, focus returns to the trigger.
+- **Sheet:** titled, focus inside, Esc closes and returns focus to Documents, `overscroll-behavior: contain`.
+- **Touch targets:** 44 px under a coarse pointer (mobile preset reports `pointer: coarse`), citations 24 px.
+- **Other items:**
+  - The file picker is the alternative to drag and drop.
+  - At 320 px: no horizontal scroll (the 200% zoom equivalent), and zoom isn't disabled.
+  - `prefers-reduced-motion` verified with headless Chrome `--force-prefers-reduced-motion` (spinner → clock).
+  - `translate="no"` on names and the wordmark; `lang="en"`.
+  - Buttons are `<button>`, links are `<a>`.
+  - The question box has a label, `name`, and `autocomplete=off`.
+  - No `transition-all`.
+  - Long names truncate with the extension kept; errors wrap.
+  - Numbers use `Intl`.
+  - `color-scheme` and `theme-color` are set.
+  - Yellow appears only on evidence.
+  - The 4/8/12 radius rule holds.
+  - One icon family and one font family.
+  - No raw hex in components.
+  - Checked in light, dark, desktop and mobile.
+
+**APP_FLOW §5 states verified live:** all library row states, including new this step `unreadable`, over 25 MB (client) and `interrupted` (backend stopped mid-ingest, then swept); server starting / unreachable; answer states (step 13); 404.
+**Not verified live:** "Couldn't load your documents." (needs `/documents` to fail while `/health` succeeds; the logic is covered by reading, not triggered); `workspace_full` / `storage_full` rows (backend tests cover the codes; the UI uses the copy table); "delete failed" toast.
+**Affects:** `frontend/app/{globals.css,layout.tsx,not-found.tsx}`, `frontend/components/{workspace-provider,library,first-visit,answer,app-header}.tsx`, `frontend/components/ui/{button,spinner,sheet,alert-dialog,message-scroller}.tsx`, `frontend/lib/workspace.ts`.

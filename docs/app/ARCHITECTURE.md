@@ -2,7 +2,7 @@
 
 Living map of the code. **Update this file whenever a folder, module, or connection is added or changes.** Status: `planned` = not built yet, `exists` = in the repo.
 
-_Last updated: 2026-09-27 (step 13: thread and streaming answers)_
+_Last updated: 2026-09-27 (step 14: states, accessibility, mobile; Milestone B)_
 
 ## How the pieces connect
 
@@ -48,7 +48,7 @@ Data shapes and endpoint details: [BACKEND_SCHEMA.md](BACKEND_SCHEMA.md). Design
 | `backend/scripts/spike_qdrant.py` | One-off performance spike (`python -m scripts.spike_qdrant`) | exists |
 | `backend/samples/` | 3 publishable sample files | planned (step 15, owner provides) |
 | `backend/eval/` | `qa.json`, `run_eval.py`, `results.md` | planned (step 16) |
-| `frontend/app/` | `layout.tsx` (fonts, viewport, TooltipProvider, Toaster), `page.tsx` (renders `Workspace`), `globals.css` (UI_UX_BRIEF tokens, row-flash keyframes) | exists |
+| `frontend/app/` | `layout.tsx` (fonts, viewport, TooltipProvider, Toaster, returning-visitor inline script), `not-found.tsx` (S13 404), `page.tsx` (renders `Workspace`), `globals.css` (UI_UX_BRIEF tokens incl. `--scrim`, animations, global focus ring, first-visit hiding) | exists |
 | `frontend/components/` | `workspace-provider.tsx` (client state: health, library, uploads, polling, delete dialog, drag and drop, announcements), `workspace.tsx` (layout), `app-header.tsx` (status + mobile sheet), `server-banner.tsx`, `library.tsx`, `first-visit.tsx`, `question-box.tsx` (draft, counter, Enter/Shift+Enter, send/Stop), `guarded-button.tsx`, `file-name.tsx`; `thread-provider.tsx` (turns, streaming, stop, retry, answer errors), `thread.tsx`, `answer.tsx` (progress, parsed answer, citations, sources); shadcn `ui/` | exists |
 | `frontend/lib/` | `api.ts` (typed calls, `ApiError`, `ask()` SSE reader), `answer-text.ts` (+ `answer-text.test.ts`, `npm test` via `node --test`), `workspace.ts` (UUID v4 in localStorage), `copy.ts` (APP_FLOW §5 strings), `types.ts`, `limits.ts`, `format.ts`, `utils.ts`; `samples.ts` (step 15) | exists |
 | `frontend/.env.example` | `NEXT_PUBLIC_API_URL` (baked in at build; default `http://localhost:8000`) | exists |

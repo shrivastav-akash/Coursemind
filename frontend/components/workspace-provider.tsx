@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,6 +16,7 @@ import * as api from "@/lib/api";
 import { COPY, DOC_ERROR_COPY, UPLOAD_ERROR_COPY } from "@/lib/copy";
 import { MAX_FILE_MB, MAX_FILES_PER_BATCH } from "@/lib/limits";
 import type { DocType, Document } from "@/lib/types";
+import { hasWorkspace } from "@/lib/workspace";
 
 export type ServerState = "checking" | "ready" | "starting" | "unreachable";
 export type LibraryState = "loading" | "loaded" | "error";
@@ -53,6 +54,23 @@ function precheck(file: File): string | null {
 }
 
 const busy = (doc: Document) => doc.status === "queued" || doc.status === "processing";
+
+// Read once on the client, before any request creates a workspace: a first visit's library is
+// known to be empty, so it can render without waiting on the network. The static HTML is
+// prerendered as a first visit (Lighthouse: the first-visit text is the LCP element); for a
+// returning visit an inline script in app/layout.tsx hides those parts before first paint.
+const FIRST_VISIT = typeof window !== "undefined" && !hasWorkspace();
+const neverChanges = () => () => {};
+
+// When the focused row disappears (deleted or removed), focus would fall to <body>;
+// put it on the visible "Add files" button instead (APP_FLOW J12).
+function refocusIfLost() {
+  window.setTimeout(() => {
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const target = [...document.querySelectorAll<HTMLElement>("[data-add-files]")].find((el) => el.offsetParent !== null);
+    target?.focus();
+  }, 50);
+}
 
 function useServer() {
   const [state, setState] = useState<ServerState>("checking");
@@ -140,7 +158,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [recheck],
   );
 
-  const refresh = useCallback(async () => {
+  // quiet: an early fetch made before /health answers; its failure is the health loop's to report.
+  const refresh = useCallback(async (quiet = false) => {
     try {
       const next = await api.listDocuments();
       // Announce each document that just finished (APP_FLOW J12), not every poll.
@@ -159,20 +178,29 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       setDocuments(next);
       setLibraryState("loaded");
     } catch (err) {
+      if (quiet) return;
       serverGone(err);
       // A failed poll keeps the list on screen; only a failed first load shows the error.
       setLibraryState((s) => (s === "loaded" ? s : "error"));
     }
   }, [serverGone]);
 
+  // First paint without waiting on the network (Lighthouse: the first-visit text was the LCP
+  // element, held back by /health then /documents). A returning visit fetches its library
+  // alongside /health instead of after it.
+  const firstVisit = useSyncExternalStore(neverChanges, () => FIRST_VISIT, () => true);
   useEffect(() => {
-    if (server === "ready") refresh();
+    if (!FIRST_VISIT) void refresh(true);
+  }, [refresh]);
+
+  useEffect(() => {
+    if (server === "ready") void refresh();
   }, [server, refresh]);
 
   const polling = documents.some(busy);
   useEffect(() => {
     if (!polling || server !== "ready") return;
-    const timer = window.setInterval(refresh, POLL_MS);
+    const timer = window.setInterval(() => void refresh(), POLL_MS);
     return () => window.clearInterval(timer);
   }, [polling, server, refresh]);
 
@@ -251,7 +279,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [localRows, pump],
   );
 
-  const removeLocal = useCallback((key: string) => setLocalRows((rows) => rows.filter((r) => r.key !== key)), []);
+  const removeLocal = useCallback((key: string) => {
+    setLocalRows((rows) => rows.filter((r) => r.key !== key));
+    refocusIfLost();
+  }, []);
 
   const deleteOnServer = useCallback(
     async (doc: Document): Promise<boolean> => {
@@ -266,6 +297,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         }
       }
       setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+      refocusIfLost();
       return true;
     },
     [serverGone],
@@ -332,10 +364,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       retryServer: recheck,
       documents,
       localRows,
-      libraryState,
+      libraryState: firstVisit && libraryState === "loading" ? "loaded" : libraryState,
       reloadLibrary: () => {
         setLibraryState("loading");
-        refresh();
+        void refresh();
       },
       openPicker: () => inputRef.current?.click(),
       retryUpload,
@@ -350,7 +382,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       hasDocuments,
       lockReason,
     }),
-    [server, recheck, documents, localRows, libraryState, refresh, retryUpload, removeLocal, deleteOnServer, flashId, dragging, hasDocuments, lockReason],
+    [server, recheck, documents, localRows, libraryState, firstVisit, refresh, retryUpload, removeLocal, deleteOnServer, flashId, dragging, hasDocuments, lockReason],
   );
 
   return (
@@ -371,7 +403,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         {announcement}
       </p>
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="overscroll-contain">
           <AlertDialogHeader>
             <AlertDialogTitle>
               Delete <span translate="no">{deleteTarget?.name}</span>?

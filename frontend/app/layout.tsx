@@ -23,9 +23,17 @@ export const viewport: Viewport = {
   ],
 };
 
+// Runs before first paint: a returning visitor must not glimpse the prerendered first-visit
+// state while their library loads. Mirrors lib/workspace.ts (key and UUID v4 check).
+const RETURNING_SCRIPT = `try{if(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(localStorage.getItem("coursemind.workspace")||""))document.documentElement.dataset.returning=""}catch(e){}`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={cn("h-full antialiased", sans.variable, mono.variable)}>
+    // The script above adds data-returning before hydration, so React must not flag it.
+    <html lang="en" className={cn("h-full antialiased", sans.variable, mono.variable)} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: RETURNING_SCRIPT }} />
+      </head>
       <body className="h-full">
         <TooltipProvider>
           <Toaster>{children}</Toaster>

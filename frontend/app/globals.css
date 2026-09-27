@@ -29,6 +29,7 @@
   --color-evidence-strong: var(--evidence-strong);
   --color-evidence-tint: var(--evidence-tint);
   --color-success: var(--success);
+  --color-scrim: var(--scrim);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
@@ -110,6 +111,7 @@
   --evidence-tint: #fff6c2;
   --success: #1f7a4d;
   --overlay-shadow: 0 8px 24px rgb(23 32 51 / 0.12);
+  --scrim: rgb(23 32 51 / 0.16);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -138,6 +140,7 @@
     --evidence-tint: #3b3a1e;
     --success: #4cc38a;
     --overlay-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+    --scrim: rgb(0 0 0 / 0.5);
   }
 }
 
@@ -168,4 +171,29 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/*
+ * One visible focus ring for every control: 2 px --ring with a 2 px offset (UI_UX_BRIEF §9).
+ * Unlayered on purpose: it outranks the components' layered utilities (their outline-none and
+ * 3 px translucent box-shadow ring), so no component needs its own focus styles.
+ */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+/* The question box draws the ring around the whole group, not the textarea inside it. */
+[data-slot="input-group-control"]:focus-visible {
+  outline: none;
+}
+[data-slot="input-group"]:has([data-slot="input-group-control"]:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* Prerendered first-visit parts stay hidden for a returning visitor until their library loads (see app/layout.tsx). */
+html[data-returning] [data-first-visit] {
+  display: none;
 }

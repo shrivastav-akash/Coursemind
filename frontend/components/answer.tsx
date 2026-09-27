@@ -206,7 +206,7 @@ function SourceList({
             <Collapsible open={open.has(source.n)} onOpenChange={() => onToggle(source.n)}>
               <CollapsibleTrigger
                 aria-label={`Source ${source.n}: ${source.doc_name}, ${source.location}`}
-                className="group/source flex min-h-10 w-full items-center gap-3 rounded-lg px-2 text-left text-sm transition-colors duration-[120ms] outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                className="group/source flex min-h-10 w-full pointer-coarse:min-h-11 items-center gap-3 rounded-lg px-2 text-left text-sm transition-colors duration-[120ms] outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
               >
                 <span className="w-4 shrink-0 text-muted-foreground tabular-nums">{source.n}</span>
                 <FileName name={source.doc_name} className="font-medium" />

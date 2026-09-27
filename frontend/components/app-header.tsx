@@ -15,7 +15,7 @@ function HowItWorks() {
       href={HOW_IT_WORKS}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-muted-foreground underline-offset-4 transition-colors duration-[120ms] outline-none hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm pointer-coarse:min-h-11 text-muted-foreground underline-offset-4 transition-colors duration-[120ms] outline-none hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       How it works
       <ArrowSquareOutIcon aria-hidden="true" className="size-4" />

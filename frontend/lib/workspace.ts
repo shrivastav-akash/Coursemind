@@ -21,3 +21,12 @@ export function getWorkspaceId(): string {
   current = id;
   return id;
 }
+
+/** True once this browser has a workspace; a first visit has none, so its library is known to be empty. */
+export function hasWorkspace(): boolean {
+  try {
+    return UUID_V4.test(localStorage.getItem(KEY) ?? "");
+  } catch {
+    return false;
+  }
+}

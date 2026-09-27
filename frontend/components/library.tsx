@@ -39,7 +39,7 @@ export function LibraryCount() {
 export function AddFilesButton() {
   const { server, openPicker } = useWorkspace();
   return (
-    <GuardedButton reason={server === "ready" ? null : COPY.waitingForServer} onClick={openPicker}>
+    <GuardedButton data-add-files reason={server === "ready" ? null : COPY.waitingForServer} onClick={openPicker}>
       <PlusIcon data-icon="inline-start" aria-hidden="true" />
       Add files
     </GuardedButton>
@@ -101,7 +101,11 @@ function LibraryList() {
     );
   }
   if (documents.length === 0 && localRows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No documents yet.</p>;
+    return (
+      <p data-first-visit className="text-sm text-muted-foreground">
+        No documents yet.
+      </p>
+    );
   }
   return (
     <ul aria-label="Your documents" className="-mx-2 flex min-h-0 flex-col gap-1 overflow-y-auto overscroll-contain">
