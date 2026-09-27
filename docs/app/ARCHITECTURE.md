@@ -2,7 +2,7 @@
 
 Living map of the code. **Update this file whenever a folder, module, or connection is added or changes.** Status: `planned` = not built yet, `exists` = in the repo.
 
-_Last updated: 2026-09-27 (step 5: Qdrant spike)_
+_Last updated: 2026-09-27 (step 6: collections and document registry)_
 
 ## How the pieces connect
 
@@ -34,7 +34,7 @@ Data shapes and endpoint details: [BACKEND_SCHEMA.md](BACKEND_SCHEMA.md). Design
 |---|---|---|
 | `docs/app/` | PRD, TRD, APP_FLOW, UI_UX_BRIEF, BACKEND_SCHEMA, IMPLEMENTATION_PLAN, this file | exists |
 | `docs/user/` | CONSTRAINTS, DECISIONS, HANDOVER; private `CourseMind_build_plan.md` (git-ignored) | exists |
-| `backend/app/main.py` | FastAPI app, CORS, routes, error bodies, rate limiter, job queue | exists: CORS + `GET /health` (routes in steps 9, 10) |
+| `backend/app/main.py` | FastAPI app, CORS, routes, error bodies, rate limiter, job queue | exists: CORS, lifespan (fails without Qdrant settings, then `store.ping()`), `GET /health` → 200 / 503 `unavailable` (routes in steps 9, 10) |
 | `backend/app/config.py` | Env vars, limits, fixed ids, model names | exists |
 | `backend/app/schemas.py` | Pydantic models | exists |
 | `CLAUDE.md` | Tier, doc locations, commands for AI sessions | exists |
@@ -42,9 +42,9 @@ Data shapes and endpoint details: [BACKEND_SCHEMA.md](BACKEND_SCHEMA.md). Design
 | `backend/pytest.ini` | Puts `backend/` on the import path for tests | exists |
 | `backend/.env.example` | Env var names, no secrets | exists |
 | `backend/app/parsing.py` | Type detection, parsers, chunking | exists: `detect_type`, `parse`, `parse_pdf`, `parse_docx`, `parse_pptx`, `chunk_sections`, `UploadError` |
-| `backend/app/store.py` | Qdrant collections, registry, ingest, retrieval, delete | planned (steps 6–7) |
+| `backend/app/store.py` | Qdrant collections, registry, ingest, retrieval, delete | exists: `ensure_ready`, `ping`, `ensure_collections`, `sweep_interrupted`, registry CRUD (ingest/retrieval step 7) |
 | `backend/app/llm.py` | Prompt, Groq streaming, rate-limit handling | planned (step 8) |
-| `backend/tests/` | Offline tests + `live`-marked tests | exists: `test_api.py`, `test_parsing.py` |
+| `backend/tests/` | Offline tests + `live`-marked tests | exists: `test_api.py`, `test_parsing.py`, `test_store.py`, `test_store_live.py` (`live` marker, skipped without `QDRANT_URL`) |
 | `backend/scripts/spike_qdrant.py` | One-off performance spike (`python -m scripts.spike_qdrant`) | exists |
 | `backend/samples/` | 3 publishable sample files | planned (step 15, owner provides) |
 | `backend/eval/` | `qa.json`, `run_eval.py`, `results.md` | planned (step 16) |

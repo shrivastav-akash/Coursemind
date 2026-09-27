@@ -72,3 +72,20 @@ One entry per decision made during the build, newest at the bottom. Decisions ma
 **Why:** 717–774 ms < 1 s and ~23 s < 60 s, measured with the worst-case network path (India ↔ São Paulo). Roughly 335–408 ms of each query is network round trip, so the Qdrant-side cost of `hybrid_rerank` is about 0.4 s (an estimate: query time minus measured round trip).
 **Open:** Render has no South American region (Oregon, Ohio, Virginia, Frankfurt, Singapore). The cluster region vs Render region choice is pending with the owner (see HANDOVER).
 **Affects:** `backend/scripts/spike_qdrant.py`, `backend/requirements.txt` (`qdrant-client==1.19.1`), ARCHITECTURE.
+
+## 2026-09-27 — Qdrant region kept for now
+**Context:** The step 5 spike showed the cluster is in AWS `sa-east-1` (São Paulo), and Render has no South American region.
+**Decision:** Keep the current cluster during development. Recreate it near the chosen Render region before deploy (owner asked to be reminded; tracked in HANDOVER).
+**Why:** The cluster is still cheap to replace, and development latency is acceptable (the gate passed from India).
+**Alternatives:** AWS `us-east-1` + Render Virginia (recommended), or `ap-southeast-1` + Render Singapore if the free tier offers it.
+**Affects:** HANDOVER (pending item), step 17.
+
+## 2026-09-27 — Startup when Qdrant is down; registry details
+**Context:** TRD §7.3 runs `ensure_collections()` + the sweep at startup, but APP_FLOW J9 needs the backend to stay up and answer `/health` 503 when the vector store is down. Crashing at boot would also make Render restart-loop during a Qdrant outage.
+**Decision:**
+- Missing `QDRANT_URL` / `QDRANT_API_KEY` stops startup (config error). An unreachable Qdrant does not: `store.ensure_ready()` runs setup once per process under a lock. It is tried at startup, by `/health`, and (from step 9) before any route that touches Qdrant, so it recovers by itself when Qdrant comes back.
+- The sweep always finishes before any request can create a record, so it never marks new work as interrupted.
+- `created_at` / `updated_at` use RFC 3339 UTC with microseconds (`2026-09-27T10:15:02.123456Z`). The format is still RFC 3339; the extra precision keeps "newest first" stable for two uploads in the same second. The BACKEND_SCHEMA example shows seconds only and was left unchanged (approved doc).
+- Qdrant's `set_payload` removes keys whose value is `None`, so a cleared `error_code` comes back missing. All reads go through one helper that restores `error_code: None`. The live tests caught this.
+- An outage logs one warning line without a traceback, because the frontend re-checks `/health` every 3 s.
+**Affects:** `backend/app/store.py`, `backend/app/main.py`, tests, ARCHITECTURE.
