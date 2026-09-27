@@ -279,13 +279,16 @@ def retrieve(question: str, workspace_id: str, ready_ids: list[str], mode: Retri
             ),
         ]
         if mode == "hybrid":
-            query: models.FusionQuery | models.Document = models.FusionQuery(fusion=models.Fusion.RRF)
-            using = None
-        else:  # hybrid_rerank: ColBERT MaxSim re-scores the union of both candidate lists
-            query, using = models.Document(text=question, model=config.COLBERT_MODEL), "colbert"
-        points = client().query_points(
-            CHUNKS, prefetch=prefetch, query=query, using=using, query_filter=scope, limit=k,
-        ).points
+            points = client().query_points(
+                CHUNKS, prefetch=prefetch, query=models.FusionQuery(fusion=models.Fusion.RRF),
+                query_filter=scope, limit=k,
+            ).points
+        else:  # hybrid_rerank: ColBERT MaxSim re-scores the whole union of both candidate lists
+            points = client().query_points(
+                CHUNKS, prefetch=prefetch, query=models.Document(text=question, model=config.COLBERT_MODEL),
+                using="colbert", query_filter=scope, limit=2 * config.PREFETCH_K,
+            ).points
+            points = _with_second_document(points, k)
     return [
         Source(
             n=i, doc_id=p.payload["doc_id"], doc_name=p.payload["doc_name"], doc_type=p.payload["doc_type"],
@@ -294,3 +297,21 @@ def retrieve(question: str, workspace_id: str, ready_ids: list[str], mode: Retri
         for i, p in enumerate(points, start=1)
         if p.payload
     ]
+
+
+def _with_second_document(points: list[models.ScoredPoint], k: int) -> list[models.ScoredPoint]:
+    """Top k by re-rank score, except when all k come from one document while another document's
+    best passage scores within SECOND_DOC_RATIO of the leader: then that passage takes the last slot.
+
+    Without this a question spanning two documents loses the smaller one (PRD FR-12). In the step 10
+    check a two-topic question filled the top 20 from a 70-chunk PDF although the other document's
+    best passage scored 24.6 against 25.3. Slots 1..k-1 never change.
+    """
+    top = points[:k]
+    if k < 2 or len(top) < k or not top[0].payload or len({p.payload["doc_id"] for p in top if p.payload}) > 1:
+        return top
+    leader = top[0].payload["doc_id"]
+    other = next((p for p in points[k:] if p.payload and p.payload["doc_id"] != leader), None)
+    if other is None or top[0].score <= 0 or other.score < config.SECOND_DOC_RATIO * top[0].score:
+        return top
+    return [*top[:-1], other]

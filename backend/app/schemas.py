@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 DocType = Literal["pdf", "docx", "pptx"]
 Status = Literal["queued", "processing", "ready", "failed"]
@@ -27,6 +27,8 @@ class Document(BaseModel):
     created_at: datetime
 
 class AskRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
     question: str = Field(min_length=3, max_length=500)  # stripped before validation
 
 class Source(BaseModel):

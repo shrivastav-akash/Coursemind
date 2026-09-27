@@ -130,3 +130,141 @@ One entry per decision made during the build, newest at the bottom. Decisions ma
 - **Re-queued failed document:** keeps its original name.
 - **Rate limiter:** sliding window per (IP, bucket), in memory. The IP is the first `X-Forwarded-For` entry, as BACKEND_SCHEMA §6 specifies. **Risk to check at deploy (step 17):** if Render appends to a client-sent `X-Forwarded-For` rather than replacing it, the first entry can be spoofed to dodge the limit; then use the entry Render adds.
 **Affects:** `backend/app/main.py`, `backend/app/store.py` (`count_documents`, `count_chunks`), `backend/requirements.txt`, `backend/tests/test_documents_api.py`.
+
+## 2026-09-27 — Streaming /ask (step 10) and Milestone A findings
+**Decision:**
+- **Before the stream starts:** workspace → Qdrant ready → question validation → rate limit (5/min/IP) → registry read + retrieval → `no_ready_documents`. Any Qdrant failure in that phase is a normal 503 `unavailable`, never a broken stream.
+- **Question validation:** `AskRequest` gains `ConfigDict(str_strip_whitespace=True, extra="forbid")`. The "stripped before validation" comment in BACKEND_SCHEMA §8 is now enforced, and unknown keys are rejected. The fields and limits are unchanged.
+- **The stream:** `answer_events()` is an async generator: `sources` → `token`… → `done` | `error`. SSE data is `json.dumps`, so a newline inside a piece never breaks the framing.
+  - Empty retrieval → refusal token and `done {refused: true, model: null}`, with no LLM call.
+  - `refused` is computed as `answer.strip() == config.REFUSAL`.
+- **Disconnect:** `pieces.close()` in `finally` drops the Groq connection when the visitor leaves. Verified live: curl left after 1.5 s and the server logged `ask: disconnected` at 1.6 s. A mutation check shows the offline test fails without the close.
+- **Logging:** per ask, counts and timings only (sources, pieces, first-piece ms, total ms, outcome). Never the question text, and never the workspace id, since it works as a bearer capability.
+**Measured (local machine in India → Qdrant São Paulo → Groq; 4 asks; single samples, not a benchmark):** registry read + retrieval 1.0–2.7 s; first piece at 1.6–3.1 s after the request arrived; full 117-piece answer at 1.75 s total.
+**Findings to resolve by step 16 (not changed here; they touch the approved TRD prompt and retrieval design):**
+1. **Cross-document answers can fail (PRD G2 / FR-12).** A question joining two unrelated topics ("How does the MIME database weight glob patterns, and what does Banker's algorithm do?") retrieved 4/4, and even 8/8, passages from the larger 70-chunk PDF. Each half on its own retrieves correctly. The model then refused the whole question instead of answering the half it had sources for.
+2. The model writes Markdown (`**bold**`, numbered lists) despite "Plain text" in the prompt.
+3. It cites once at the end (`[1]`) rather than after every claim.
+4. A DOCX Title with no body becomes a chunk containing only the title.
+**Frontend note (step 13):** citation markers arrive split across pieces (`[`, `1`, `]`), so parse citations on the accumulated text, not per piece.
+**Affects:** `backend/app/main.py`, `backend/app/schemas.py`, `backend/app/llm.py` (return type), `backend/tests/test_ask_api.py`.
+
+## 2026-09-27 — Cross-document fix (owner approved)
+**Context:** Step 10 found a two-topic question answered from only the larger document, then refused outright (PRD G2 / FR-12).
+**Diagnosis (measured):** The small document's passage *was* a candidate (BM25 rank 8), but ColBERT scores are tightly bunched: it scored 24.6 against the leader's 25.3, and about 20 passages from the 70-chunk PDF sat in between, so `limit=k` dropped it. Dense ranked it 66th of 73. Re-scoring more candidates alone would not help; the ranking itself squeezes it out.
+**Decision:**
+1. **Retrieval (`hybrid_rerank` only):** re-rank the whole prefetch union (`limit=2×PREFETCH_K`), take the top k, and if all k are from one document while another document's best passage scores ≥ `SECOND_DOC_RATIO` (0.95) × the leader, that passage takes the last slot. Slots 1..k−1 never change, so hit@1..k−1 can't get worse. `dense` / `hybrid` stay unchanged as clean eval baselines.
+2. **Threshold data (5 questions, tiny sample):** the second document's best/leader ratio was 0.97–0.98 when it was relevant and 0.90–0.93 when it wasn't. 0.95 splits them and is a constant (`config.SECOND_DOC_RATIO`) to tune in step 16.
+3. **Prompt:** "If the sources answer only part of the question, answer that part and say which part your notes don't cover. If the sources contain nothing that answers the question, reply exactly: …" (replaces the all-or-nothing sentence).
+4. **Step 16:** `qa.json` gets at least 3 two-document questions, and the eval reports how often both documents reach the top k.
+**Verified live (real server, OS notes DOCX + 70-chunk MIME PDF):**
+- Two-topic question → sources include `OS_Unit3_Deadlocks.docx § Handling deadlocks` at [4], and the answer cites [2] (PDF) and [4] (DOCX).
+- Half-covered question → answers the covered half with [1] and says TCP isn't in the notes, `refused: false`.
+- Out-of-scope → exact refusal, `refused: true`.
+- Single-topic "magic rule format" → 4/4 PDF sources (no noise added).
+- A live test (`test_two_topic_question_gets_passages_from_both_documents`) fails with the rule disabled and passes with it.
+**New observation:** the model sometimes cites with full-width brackets `【3】` instead of `[3]`. The step 13 citation parser must accept both.
+**Affects:** `backend/app/store.py`, `config.py`, `llm.py`, tests; TRD §8.2–8.3; IMPLEMENTATION_PLAN step 16.
+
+## 2026-09-27 — Frontend shell (step 11)
+**Decision:**
+- **Scaffold:** `create-next-app` 16.3.6 (TypeScript strict, App Router, Tailwind v4, ESLint, no `src/`). It also added `frontend/AGENTS.md` + `frontend/CLAUDE.md` (Next's own "read the bundled docs" note; `next dev` re-adds them, so they stay). `output: "export"`, `images.unoptimized`.
+- **shadcn:** `init` with the Base UI base, `base-nova` style, and Phosphor icons. The preset was passed as a full `ui.shadcn.com/init?...` URL; partial URLs return 400. Added the UI_UX_BRIEF §6 component map, including chat primitives (`message-scroller`, `message`, `bubble`), `item`, `empty`, `input-group`, `field`, `sheet`, `alert-dialog`, `collapsible`, `toast`. New runtime deps come from shadcn: `@base-ui/react`, `@phosphor-icons/react`, `@shadcn/react`, `class-variance-authority`, `cn`, `shadcn`, `tw-animate-css`.
+- **Tokens (§3):**
+  - Every shadcn token is replaced with the brief's hex values, and `--evidence*` / `--success` are added.
+  - Dark mode uses `@media (prefers-color-scheme: dark)`, both for the variables and via `@custom-variant dark`, so the components' `dark:` classes follow the OS. There is no toggle.
+  - Type: `text-xs` becomes the 13/18 caption, plus a `text-reading` 17/27 step.
+  - Radius scale: sm 4 px, md/lg 8 px, xl+ 12 px, matching the 4/8/12 rule. `shadow-lg` maps to the overlay shadow only.
+  - A global reduced-motion rule is in place.
+- **Fonts:** Atkinson Hyperlegible Next + Mono via `next/font/google` (variable). The build warns that Next can't compute fallback metrics for them, a small layout-shift risk while fonts load; measure with Lighthouse in step 14.
+- **Owned-component edits:**
+  - `Button`: new `evidence` variant, kept at 4 px via a compound variant; press scales to 0.98; `transition-all` replaced with named properties.
+  - `Badge`: 4 px radius, no `transition-all`.
+  - `Spinner`: `CircleNotch`, `aria-hidden` because status text always sits beside it; imported from `@phosphor-icons/react/ssr`, since the client build breaks server rendering.
+  - `InputGroup`: the disabled look now triggers only when its text control is disabled. The shadcn default greyed the whole box whenever the send button was disabled, i.e. whenever the box was empty. Both the light and dark variants were fixed.
+- **Server components:** server components import icons from `@phosphor-icons/react/ssr`.
+- **Layout check:** a `/preview` route renders the §4.1 layout with placeholder data, because the real app has no data until steps 12–13. It is `noindex` and marked for deletion in step 13 (`ponytail:` comment).
+- **Deferred to step 14 (accessibility pass):**
+  - The brief's focus ring (2 px `--ring`, 2 px offset) vs shadcn's 3 px translucent ring.
+  - 44 px touch targets.
+  - Focus return after closing the sheet (a check right after Esc found focus on "Add files", not the trigger; may have run mid-animation).
+**Verified:** `npm run build` → `out/` with `/`, `/preview`, `/404`. `tsc --noEmit` and `eslint` are clean. Checked in the browser pane at 1440 (light + dark), 1024 (dark), 768 (light) and 320 px (light + dark, sheet open): the layouts follow §4.1, §4.2 and §4.5. Computed styles confirm the token values, fonts (Atkinson 17/27 px answers), 4/8/12 px radii and the evidence colours. The page is 320 px wide at 320 px (no horizontal scroll). The sheet is 88vw, titled, moves focus inside, and closes on Esc.
+**Affects:** `frontend/` (new), `.claude/launch.json`, ARCHITECTURE.
+
+## 2026-09-27 — Library wired to the API (step 12)
+**Decision:**
+- **One client provider:** `components/workspace-provider.tsx` holds all live state behind a React context. That covers server health, the document list, local upload rows, polling, delete, drag and drop and screen-reader announcements. No state library was added.
+- **Server status (APP_FLOW §2):**
+  - `GET /health` every 3 s until it answers; "Unreachable" after 90 s of failures; "Try again" restarts the clock.
+  - A network error or a 503 `unavailable` from any call drops the app back to "Starting" and resumes checks, so the header, banner and locked controls stay honest.
+  - The banner is hidden during the very first check, so a normal load shows no flash.
+- **Uploads (APP_FLOW J3):**
+  - The browser rejects wrong type, legacy `.doc`/`.ppt` and files over 25 MB instantly. Only the first 10 files of a batch are kept, with a toast.
+  - Two uploads run at once; the rest show "Waiting…".
+  - An accepted file replaces its local row with the server record. A duplicate (HTTP 200) triggers a toast and a 1.2 s flash of the existing row.
+  - Only network failures offer Retry.
+  - Copy comes from `lib/copy.ts` (APP_FLOW §5 verbatim), falling back to the server `message` for unknown codes.
+- **Polling:** every 2 s while any document is queued or processing. A failed poll keeps the list on screen; only a failed first load shows "Couldn't load your documents." with Try again. Finished documents are announced once in an `aria-live="polite"` region ("X is ready." / "X failed: …").
+- **Delete:** confirmed through an `AlertDialog` with the brief's copy; the toast is "X deleted.", and a 404 counts as already deleted. "Remove" on a server-side failed row calls DELETE with no dialog, since nothing usable is lost.
+- **Buttons with a reason:** "Add files", "Try sample documents" and delete-while-processing use `aria-disabled` plus a tooltip (`GuardedButton`), so the reason stays reachable by hover and focus.
+- **Question box:** locked with the reason as placeholder: waiting for the server / "Add a document to ask questions." / "Your documents are still processing…".
+- **`/preview` route and placeholder data deleted now** rather than in step 13: the workspace became state-driven and the layout check was done.
+- **UI fixes found in the browser:** "1 passages" → `Intl.PluralRules` ("1 passage"). The sheet and dialog backdrops no longer blur (UI_UX_BRIEF §3.4: no blur).
+- **`frontend/.gitignore`:** the scaffold's `.env*` also hid `.env.example`; `!.env.example` added so it gets committed.
+- **Deleted (owner approved):** create-next-app's unused `public/*.svg`; the default favicon is kept.
+**Verified (real backend on :8000 + cluster, static build on :3000, browser pane):**
+- **Backend down on load:** "Starting server…", banner, controls locked with the reason. Backend started: "Connected" with no reload.
+- **Six files in one pick:** 2 uploading and the rest waiting. `.txt` and `.ppt` rejected in the browser, fake PDF rejected by the server (415). PDF/DOCX/PPTX went Queued → Ready; question box unlocked; "Scheduling.pptx is ready." announced.
+- **Reload:** the library persisted.
+- **Drop path:** overlay shown; new file queued. The blank PDF became a server-side failed row with the no-text copy. The same bytes again gave the toast plus a flash and no new row.
+- **Delete:** confirmed through the dialog with real clicks at native pane size → row gone, "X deleted." toast. Remove on the failed row deleted it on the server too.
+- **Backend stopped, then a drop:** row "Upload didn't finish. Check your connection." with Retry, failure announced, status back to "Starting". Backend restarted, then Retry → uploaded → Ready.
+- **11 files:** 10 rows plus the batch toast.
+- **Backend down for 90 s:** "Can't reach the server" and the banner with Try again. Try again → "Connected".
+- **Dark mode:** checked. Clean-up left the cluster at 0 records.
+- (Clicks in a *scaled* emulated viewport, 1280 px in a 961 px pane, missed Base UI dialog buttons; the same flow passed with native-size clicks and via DOM click. This is a tooling artefact, not an app bug.)
+**Affects:** `frontend/components/*`, `frontend/lib/{api,workspace,copy,format}.ts`, `frontend/app/*`, `frontend/.gitignore`, `frontend/.env.example`, `.claude/launch.json`.
+
+## 2026-09-27 — Qdrant cluster moved to Oregon; Render region Oregon (owner decision)
+**Context:** The step 5 cluster was in AWS `sa-east-1` (São Paulo), and Render has no South American region.
+**Decision (owner):** Recreate the Qdrant free cluster in AWS `us-west-2` (Oregon) and deploy the Render service in Oregon, so backend and vector store share a region.
+**Re-measured (spike from India → Oregon; single run):** round trip 263 ms (was 335–408). `hybrid_rerank` median 294 ms (was 717–774), `dense` 287 ms, `hybrid` 284 ms. 50-page ingest 8.8 s (was ~23 s). The gate passes. The query time is almost all network from India, so the same-region Render→Qdrant time should be far lower; measure from Render in step 17.
+**Verified:** `pytest -q` → 102 passed on the new cluster (51 s, was ~74 s). Collections and indexes were created by `ensure_collections()`, and the cluster was left empty.
+**Affects:** `backend/.env` (owner), ARCHITECTURE (external services).
+
+## 2026-09-27 — Thread and streaming answers (step 13)
+**Decision:**
+- **`api.ask()`:** reads the `fetch` body with `TextDecoderStream` and splits on blank lines into typed `AskEvent`s. `EventSource` can't POST.
+  - Aborting (Stop) rethrows the `AbortError`; a dropped connection becomes `ApiError("network")`.
+  - A stream that ends without `done`/`error` is treated as "Connection lost".
+- **`thread-provider.tsx`:** keeps turns in memory only.
+  - Asking a new question stops a running answer first; that answer shows "Stopped.". Retry re-runs the same turn in place.
+  - Pre-stream errors: `no_ready_documents` → "Add a document before asking." + Add files. `ask_rate_limited` → message without Retry, and the question goes back into the box. Network or `unavailable` → "Connection lost…" + Retry, and a server re-check.
+  - Stream errors map per APP_FLOW J4 (`llm_busy` and `llm_error` offer Retry, `daily_limit` doesn't).
+  - The question draft lives in the provider, so a rate-limited question can be restored.
+- **`lib/answer-text.ts`:** parses the *accumulated* text on every update, since markers arrive split across pieces.
+  - Citations: `[n]`, `【n】` and `[1, 2]`, and only numbers that match a received source.
+  - Formatting: paragraphs; `-`/`*`/`•`/`1.` lists, with indented lines continuing the item; `**bold**` and `*emphasis*`, both rendered as weight 700 per the brief; `#` headings as a bold line. An unclosed `**` stays literal while streaming.
+  - `ponytail:` a small Markdown subset; a library if answers need more.
+- **Tests without a new dependency:** `npm test` runs `node --test` on `lib/*.test.ts` (Node 26 strips types natively). `tsconfig` gains `allowImportingTsExtensions` (valid because `noEmit`). 8 tests.
+- **Answer block (UI_UX_BRIEF §4.3):**
+  - Progress line "Searching N documents…" → "Found K passages. Writing answer…", then gone when done. A caret blinks while writing (it ends visible, so reduced motion leaves it still). Source rows fade in 40 ms apart (max 6).
+  - Refusal: the text plus the hint, no sources, no yellow.
+  - Citations toggle their controlled source row, scroll it into view only if off screen, and keep focus. The row id `source-{turn}-{n}` is unique per turn. A "since removed" note appears when the document has left the library.
+  - `aria-busy` while streaming, and one polite "Answer ready." per answer.
+- **Question box:** controlled; Enter sends (not during IME composition) and Shift+Enter adds a line; "Type at least 3 characters." under 3; counter from 450; `maxLength` 500; grows to about 6 lines; send becomes Stop while streaming.
+**Verified live (real backend, Oregon cluster, Groq, browser pane):**
+- **Two-topic question:** the progress states appeared in order, and the answer cited both `shared-mime-info-…, p. 13` and `OS_Unit3_Deadlocks, § Handling deadlocks`, with no raw markers left.
+- **Citation:** opens its passage in view, turns active, and keeps focus.
+- **Stop:** mid-answer the partial text stays with "Stopped." + Retry, and the backend logged `ask: disconnected … 61 pieces`. Retry completes in place.
+- **Other answer states:**
+  - Out of scope → refusal with the hint and no sources.
+  - Documents deleted behind the page → "Add a document before asking." + Add files.
+  - Rate limit → message, and the question restored to the box.
+  - Backend stopped → "Connection lost…" + Retry, banner, box locked.
+- **Question box:** "ab" blocked with the hint; Shift+Enter adds a line; 536 typed characters stop at 500 with "500 / 500".
+- **Mobile:** 375 px with no horizontal scroll. Cluster left empty.
+**Observed model behaviour (for step 16, not changed here):**
+- A broad "explain every section … in detail" question was refused although the notes cover the topic.
+- A long answer claimed most OSes use detection and recovery, which the notes don't say.
+**Affects:** `frontend/lib/{api,answer-text,copy,types}.ts`, `frontend/components/{thread-provider,thread,answer,question-box,workspace}.tsx`, `frontend/app/globals.css`, `frontend/package.json`, `frontend/tsconfig.json`.

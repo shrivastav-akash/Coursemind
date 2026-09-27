@@ -270,7 +270,8 @@ streams sources, then a cited answer. **Milestone A reached.**
 ### Step 16 — Evaluation and tuning
 
 **Do**
-- I draft `eval/qa.json` from the sample files (15 questions with expected locations, 3 out-of-scope); **you** check and correct the expected locations.
+- I draft `eval/qa.json` from the sample files (15 questions with expected locations, 3 out-of-scope, and at least 3 two-document questions whose expected locations span two files); **you** check and correct the expected locations.
+- Report how often both documents appear in the top k for the two-document questions, and tune `SECOND_DOC_RATIO` (added 2026-09-27).
 - `eval/run_eval.py` per TRD §11; `--refusal` flag; writes `eval/results.md`.
 - Set `CHUNK_SIZE`, `TOP_K`, `RETRIEVAL_MODE` defaults from the best row.
 

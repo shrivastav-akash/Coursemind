@@ -63,6 +63,7 @@ def test_prompt_numbers_sources_and_uses_the_exact_refusal():
     system, human = llm.build_prompt("What is 3NF?", SOURCES)
 
     assert system[0] == "system" and f"reply exactly: {config.REFUSAL}" in system[1]
+    assert "answer that part and say which part your notes don't cover" in system[1]  # no all-or-nothing refusal
     assert human == ("human", "Sources:\n[1] (DBMS.pptx, slide 4)\n3NF removes transitive dependencies.\n\n"
                               "[2] (OS_Lecture3.pdf, p. 12)\nDeadlock needs four conditions.\n\nQuestion: What is 3NF?")
 

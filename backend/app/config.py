@@ -46,6 +46,11 @@ UPLOAD_LIMIT = (30, 3600)
 
 REFUSAL = "I couldn't find that in your notes."
 
+# A second document's best re-ranked passage joins the top k when it scores at least this share of
+# the leader (store._with_second_document). ponytail: set from 5 questions in the step 10 check
+# (relevant 0.97-0.98, unrelated 0.90-0.93); tune on the step 16 eval.
+SECOND_DOC_RATIO = 0.95
+
 # Qdrant Cloud Inference models (BACKEND_SCHEMA §4).
 DENSE_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 SPARSE_MODEL = "qdrant/bm25"

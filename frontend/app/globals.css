@@ -1,0 +1,171 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Appearance follows the operating system; there is no in-app toggle (UI_UX_BRIEF §3.1). */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-evidence: var(--evidence);
+  --color-evidence-foreground: var(--evidence-foreground);
+  --color-evidence-strong: var(--evidence-strong);
+  --color-evidence-tint: var(--evidence-tint);
+  --color-success: var(--success);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-sans);
+
+  /* Type scale (§3.2). Caption replaces Tailwind's 12 px xs; reading is the answer text. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.125rem;
+  --text-reading: 1.0625rem;
+  --text-reading--line-height: 1.6;
+  --text-xl--line-height: 1.625rem;
+  --text-2xl--line-height: 1.875rem;
+
+  /* Radius rule (§3.4): 4 px marks and badges, 8 px controls and rows, 12 px panels and bubbles. */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 12px;
+  --radius-3xl: 12px;
+  --radius-4xl: 12px;
+
+  /* Flat by default; only overlays (sheet, dialog, toast) cast a shadow (§3.4). */
+  --shadow-lg: var(--overlay-shadow);
+
+  /* Streaming caret blinks once a second; ends visible, so reduced motion leaves a still caret (§3.6). */
+  --animate-caret: caret 1s steps(1) infinite;
+  @keyframes caret {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  /* Sources arrive: rows fade in top to bottom, 40 ms apart (the one orchestrated moment, §3.6). */
+  --animate-source-in: source-in 160ms ease-out backwards;
+  @keyframes source-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  /* Duplicate upload: the existing row flashes once (§3.6). */
+  --animate-row-flash: row-flash 1.2s ease-out 1;
+  @keyframes row-flash {
+    from {
+      background-color: var(--secondary);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+}
+
+:root {
+  color-scheme: light dark;
+  --radius: 8px;
+
+  --background: #f7f8fa;
+  --foreground: #172033;
+  --card: #ffffff;
+  --card-foreground: #172033;
+  --popover: #ffffff;
+  --popover-foreground: #172033;
+  --primary: #172033;
+  --primary-foreground: #f7f8fa;
+  --secondary: #eef1f5;
+  --secondary-foreground: #172033;
+  --muted: #eef1f5;
+  --muted-foreground: #5b6474;
+  --accent: #eef1f5;
+  --accent-foreground: #172033;
+  --destructive: #b42318;
+  --border: #dde1e8;
+  --input: #7c8698;
+  --ring: #172033;
+  --evidence: #ffe45c;
+  --evidence-foreground: #172033;
+  --evidence-strong: #f5cf1f;
+  --evidence-tint: #fff6c2;
+  --success: #1f7a4d;
+  --overlay-shadow: 0 8px 24px rgb(23 32 51 / 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #121826;
+    --foreground: #e8ecf3;
+    --card: #1a2233;
+    --card-foreground: #e8ecf3;
+    --popover: #1a2233;
+    --popover-foreground: #e8ecf3;
+    --primary: #e8ecf3;
+    --primary-foreground: #121826;
+    --secondary: #212b3d;
+    --secondary-foreground: #e8ecf3;
+    --muted: #212b3d;
+    --muted-foreground: #9aa4b5;
+    --accent: #212b3d;
+    --accent-foreground: #e8ecf3;
+    --destructive: #f97066;
+    --border: #2a3447;
+    --input: #6b7587;
+    --ring: #e8ecf3;
+    --evidence: #ebd452;
+    --evidence-foreground: #121826;
+    --evidence-strong: #ffe45c;
+    --evidence-tint: #3b3a1e;
+    --success: #4cc38a;
+    --overlay-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-base text-foreground;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+}
+
+/* Motion only explains a change; with reduced motion every change is instant (§3.6). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

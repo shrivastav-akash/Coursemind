@@ -107,3 +107,24 @@ def test_delete_document_removes_record_and_chunks(workspace, tmp_path):
 
     assert store.get_document(workspace, record["id"]) is None
     assert stored_chunks(workspace, record["id"]) == 0
+
+
+def test_two_topic_question_gets_passages_from_both_documents(workspace, tmp_path):
+    """PRD FR-12: a large document must not crowd a small one out of a question that spans both."""
+    mime_pages = [
+        f"Section {i}. The shared MIME-info database matches file names against glob patterns. Each glob "
+        f"pattern has a weight from 0 to 100; when several glob patterns match, the MIME type with the "
+        f"highest weight wins, and the database falls back to magic rules for file contents. ({i})"
+        for i in range(18)
+    ]
+    big = add(workspace, make_pdf(tmp_path / "mime.pdf", mime_pages), "mime-spec.pdf")
+    small = add(workspace, make_pdf(tmp_path / "os.pdf", [
+        "Banker's algorithm avoids deadlock: it grants a resource request only if the system stays in a safe state.",
+    ]), "os-notes.pdf")
+    ready = [big["id"], small["id"]]
+
+    sources = store.retrieve("How does the MIME database weight glob patterns, and what does Banker's algorithm do?",
+                             workspace, ready, "hybrid_rerank", k=4)
+
+    assert {s.doc_name for s in sources} == {"mime-spec.pdf", "os-notes.pdf"}
+    assert sources[0].doc_name == "mime-spec.pdf"  # the leader keeps slot 1

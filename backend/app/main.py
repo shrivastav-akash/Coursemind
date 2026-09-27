@@ -1,10 +1,12 @@
 import hashlib
+import json
 import logging
 import shutil
 import tempfile
 import threading
 import time
 from collections import defaultdict, deque
+from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from math import ceil
@@ -15,13 +17,14 @@ from fastapi import Depends, FastAPI, Header, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.concurrency import iterate_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException, MultiPartParser
 
-from app import config, store
+from app import config, llm, store
 from app.parsing import UploadError, detect_type
-from app.schemas import Document, ErrorBody, ErrorCode, Health
+from app.schemas import AskRequest, Document, ErrorBody, ErrorCode, Health, Source
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -216,6 +219,65 @@ def delete_document(doc_id: UUID, workspace_id: str = Depends(workspace), _: Non
         raise ApiError("still_processing")
     store.delete_document(workspace_id, str(doc_id))
     return Response(status_code=204)
+
+
+@app.post("/ask", response_class=StreamingResponse, responses={200: {"content": {"text/event-stream": {}}}})
+def ask(
+    body: AskRequest, request: Request, workspace_id: str = Depends(workspace), _: None = Depends(qdrant_ready)
+) -> StreamingResponse:
+    # Everything that can fail with a normal HTTP error happens before the stream starts (BACKEND_SCHEMA §7).
+    started = time.perf_counter()
+    rate_limit(request, "ask", config.ASK_LIMIT, "ask_rate_limited")
+    try:
+        ready_ids = [r["id"] for r in store.list_documents(workspace_id) if r["status"] == "ready"]
+        sources = store.retrieve(body.question, workspace_id, ready_ids, config.RETRIEVAL_MODE, config.TOP_K)
+    except Exception as exc:
+        log.warning("ask: qdrant failed: %s: %s", type(exc).__name__, exc)
+        raise ApiError("unavailable") from None
+    if not ready_ids:
+        raise ApiError("no_ready_documents")
+    log.info("ask: %d of %d ready documents matched, %d sources in %.0f ms",
+             len({s.doc_id for s in sources}), len(ready_ids), len(sources), (time.perf_counter() - started) * 1000)
+    return StreamingResponse(
+        answer_events(body.question, sources, started),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def sse(event: str, data: object) -> str:
+    # json.dumps escapes newlines, so each event's data stays on one line as SSE requires.
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+async def answer_events(question: str, sources: list[Source], started: float) -> AsyncIterator[str]:
+    """SSE body: exactly one `sources`, zero or more `token`, then exactly one `done` or `error`."""
+    yield sse("sources", [s.model_dump(mode="json") for s in sources])
+    if not sources:  # nothing to ground an answer on: refuse without calling the LLM (TRD §8.5)
+        yield sse("token", {"t": config.REFUSAL})
+        yield sse("done", {"refused": True, "model": None})
+        return
+
+    pieces, model, answer = None, None, []
+    first_ms, outcome = None, "disconnected"
+    try:
+        model, pieces = await run_in_threadpool(llm.stream_answer, question, sources)
+        async for piece in iterate_in_threadpool(pieces):
+            if first_ms is None:
+                first_ms = (time.perf_counter() - started) * 1000
+            answer.append(piece)
+            yield sse("token", {"t": piece})
+        outcome = "done"
+    except llm.LLMError as err:
+        outcome = err.code
+        yield sse("error", {"code": err.code})
+        return
+    finally:
+        if pieces is not None:
+            pieces.close()  # visitor pressed Stop (client gone): drop the Groq stream so generation stops
+        log.info("ask: %s, model %s, %d pieces, first piece %s ms, total %.0f ms", outcome, model, len(answer),
+                 f"{first_ms:.0f}" if first_ms is not None else "-", (time.perf_counter() - started) * 1000)
+    yield sse("done", {"refused": "".join(answer).strip() == config.REFUSAL, "model": model})
 
 
 # --- Upload helpers ------------------------------------------------------------------------
