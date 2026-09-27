@@ -1,0 +1,12 @@
+# secrets and local
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# frontend
+node_modules/
+.next/
+out/
+# private planning doc (never public, see CONSTRAINTS)
+docs/user/CourseMind_build_plan.md
