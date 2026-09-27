@@ -2,7 +2,7 @@
 
 Living map of the code. **Update this file whenever a folder, module, or connection is added or changes.** Status: `planned` = not built yet, `exists` = in the repo.
 
-_Last updated: 2026-09-27 (step 6: collections and document registry)_
+_Last updated: 2026-09-27 (step 9: document endpoints and worker)_
 
 ## How the pieces connect
 
@@ -34,7 +34,7 @@ Data shapes and endpoint details: [BACKEND_SCHEMA.md](BACKEND_SCHEMA.md). Design
 |---|---|---|
 | `docs/app/` | PRD, TRD, APP_FLOW, UI_UX_BRIEF, BACKEND_SCHEMA, IMPLEMENTATION_PLAN, this file | exists |
 | `docs/user/` | CONSTRAINTS, DECISIONS, HANDOVER; private `CourseMind_build_plan.md` (git-ignored) | exists |
-| `backend/app/main.py` | FastAPI app, CORS, routes, error bodies, rate limiter, job queue | exists: CORS, lifespan (fails without Qdrant settings, then `store.ping()`), `GET /health` → 200 / 503 `unavailable` (routes in steps 9, 10) |
+| `backend/app/main.py` | FastAPI app, CORS, routes, error bodies, rate limiter, job queue | exists: CORS, lifespan (fails without settings, clears `/tmp/coursemind`, then `store.ping()`), error table + handlers, `X-Workspace-Id` and Qdrant-ready dependencies, rate limiter, 1-worker ingest queue, `GET /health`, `GET/POST /documents`, `DELETE /documents/{doc_id}` (`/ask` in step 10, samples in step 15) |
 | `backend/app/config.py` | Env vars, limits, fixed ids, model names | exists |
 | `backend/app/schemas.py` | Pydantic models | exists |
 | `CLAUDE.md` | Tier, doc locations, commands for AI sessions | exists |
@@ -42,9 +42,9 @@ Data shapes and endpoint details: [BACKEND_SCHEMA.md](BACKEND_SCHEMA.md). Design
 | `backend/pytest.ini` | Puts `backend/` on the import path for tests | exists |
 | `backend/.env.example` | Env var names, no secrets | exists |
 | `backend/app/parsing.py` | Type detection, parsers, chunking | exists: `detect_type`, `parse`, `parse_pdf`, `parse_docx`, `parse_pptx`, `chunk_sections`, `UploadError` |
-| `backend/app/store.py` | Qdrant collections, registry, ingest, retrieval, delete | exists: `ensure_ready`, `ping`, `ensure_collections`, `sweep_interrupted`, registry CRUD (ingest/retrieval step 7) |
-| `backend/app/llm.py` | Prompt, Groq streaming, rate-limit handling | planned (step 8) |
-| `backend/tests/` | Offline tests + `live`-marked tests | exists: `test_api.py`, `test_parsing.py`, `test_store.py`, `test_store_live.py` (`live` marker, skipped without `QDRANT_URL`) |
+| `backend/app/store.py` | Qdrant collections, registry, ingest, retrieval, delete | exists: `ensure_ready`, `ping`, `ensure_collections`, `sweep_interrupted`, registry CRUD, `count_documents`, `count_chunks`, `ingest`, `retrieve` (3 modes), `delete_document` |
+| `backend/app/llm.py` | Prompt, Groq streaming, rate-limit handling | exists: `build_prompt`, `stream_answer` → `(model, pieces)`, `LLMError(code)`, daily-exhausted flags |
+| `backend/tests/` | Offline tests + `live`-marked tests | exists: `test_api.py`, `test_parsing.py`, `test_store.py`, `test_llm.py`, `test_documents_api.py` (routes with an in-memory fake store), `test_store_live.py`, `test_ingest_live.py`, `test_llm_live.py` (`live` marker, skipped without the service's settings); `files.py` shared test-file builders |
 | `backend/scripts/spike_qdrant.py` | One-off performance spike (`python -m scripts.spike_qdrant`) | exists |
 | `backend/samples/` | 3 publishable sample files | planned (step 15, owner provides) |
 | `backend/eval/` | `qa.json`, `run_eval.py`, `results.md` | planned (step 16) |

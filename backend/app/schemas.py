@@ -13,6 +13,7 @@ ErrorCode = Literal[
     "ask_rate_limited", "unavailable",
 ]
 StreamErrorCode = Literal["llm_busy", "daily_limit", "llm_error"]
+RetrievalMode = Literal["dense", "hybrid", "hybrid_rerank"]
 
 class Document(BaseModel):
     id: UUID

@@ -1,8 +1,11 @@
 import os
 from pathlib import Path
+from typing import get_args
 from uuid import UUID
 
 from dotenv import load_dotenv
+
+from app.schemas import RetrievalMode
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -20,11 +23,11 @@ CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "700"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
 TOP_K = int(os.getenv("TOP_K", "4"))
 PREFETCH_K = int(os.getenv("PREFETCH_K", "20"))
-RETRIEVAL_MODE = os.getenv("RETRIEVAL_MODE", "hybrid_rerank")
+RETRIEVAL_MODE: RetrievalMode = os.getenv("RETRIEVAL_MODE", "hybrid_rerank")  # type: ignore[assignment]  # checked below
 ALLOWED_ORIGINS = _list("ALLOWED_ORIGINS", "http://localhost:3000")
 
 # Fail at startup, not on the first request.
-if RETRIEVAL_MODE not in ("dense", "hybrid", "hybrid_rerank"):
+if RETRIEVAL_MODE not in get_args(RetrievalMode):
     raise ValueError(f"RETRIEVAL_MODE must be dense, hybrid or hybrid_rerank, got {RETRIEVAL_MODE!r}")
 
 # Fixed ids (BACKEND_SCHEMA §2). Never change: every stored id depends on them.

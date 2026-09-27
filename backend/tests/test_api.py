@@ -25,9 +25,10 @@ def test_health_is_503_when_qdrant_is_unreachable(monkeypatch):
     assert response.json()["code"] == "unavailable"
 
 
-def test_startup_fails_fast_without_qdrant_settings(monkeypatch):
-    monkeypatch.setattr(config, "QDRANT_URL", "")
+@pytest.mark.parametrize("setting", ["QDRANT_URL", "QDRANT_API_KEY", "GROQ_API_KEY"])
+def test_startup_fails_fast_without_settings(monkeypatch, setting):
+    monkeypatch.setattr(config, setting, "")
 
-    with pytest.raises(RuntimeError, match="QDRANT_URL"):
+    with pytest.raises(RuntimeError, match=setting):
         with TestClient(app):
             pass

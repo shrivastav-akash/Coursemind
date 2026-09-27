@@ -2,7 +2,6 @@ import zipfile
 
 import docx
 import pytest
-from fpdf import FPDF
 from pptx import Presentation
 from pptx.util import Inches
 
@@ -10,17 +9,7 @@ from app.config import MAX_UNZIPPED_MB
 from app.parsing import (
     Section, UploadError, chunk_sections, detect_type, parse, parse_docx, parse_pdf, parse_pptx,
 )
-
-
-def make_pdf(path, pages: list[str]):
-    pdf = FPDF()
-    pdf.set_font("Helvetica", size=11)
-    for text in pages:
-        pdf.add_page()
-        if text:
-            pdf.multi_cell(0, 6, text=text)
-    pdf.output(str(path))
-    return path
+from tests.files import make_pdf
 
 
 def test_pdf_one_section_per_page(tmp_path):

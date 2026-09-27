@@ -89,3 +89,44 @@ One entry per decision made during the build, newest at the bottom. Decisions ma
 - Qdrant's `set_payload` removes keys whose value is `None`, so a cleared `error_code` comes back missing. All reads go through one helper that restores `error_code: None`. The live tests caught this.
 - An outage logs one warning line without a traceback, because the frontend re-checks `/health` every 3 s.
 **Affects:** `backend/app/store.py`, `backend/app/main.py`, tests, ARCHITECTURE.
+
+## 2026-09-27 — Ingest and retrieval details
+**Context:** TRD §7.2 / §8.2 define the pipeline. A few boundaries needed settling for step 9.
+**Decision:**
+- `store.ingest(record, path)` runs the whole worker job (status updates, parse, chunk, clear old chunks, upsert in batches of 16, ready / failed) but **does not delete `path`**. The caller owns the file: upload temp files are deleted by the step 9 worker; sample files in `backend/samples/` must never be deleted.
+- Any exception during ingest → partial chunks removed, `failed` / `unreadable`, stack trace logged with the doc id only. If Qdrant itself is down, the final status write can fail too. The exception then reaches the step 9 worker, and the record stays `processing` until the next startup sweep marks it `interrupted`.
+- `retrieve(...)` applies `workspace_id AND doc_id IN ready_ids` inside both prefetches and on the outer query, returns `Source` items numbered from 1, and returns `[]` with no Qdrant call when there are no ready ids.
+- `RetrievalMode` is one `Literal` in `schemas.py`; `config.py` validates `RETRIEVAL_MODE` against it.
+- The live test asserts the target page is the **top-1** result in all three modes (stronger than the plan's "in the top 4", which a 6-page document would pass almost by default).
+**Affects:** `backend/app/store.py`, `schemas.py`, `config.py`, tests.
+
+## 2026-09-27 — Groq call settings and the LLM module interface (step 8)
+**Context:** TRD §8.4 asked the spike to confirm the reasoning kwarg and the daily-limit wording.
+**Findings (live, 2026-09-27):**
+- Both `openai/gpt-oss-20b` and `openai/gpt-oss-120b` are listed by the Groq models API for this key.
+- **Exact kwarg:** `ChatGroq(..., reasoning_effort="low", model_kwargs={"include_reasoning": False})`. `langchain-groq` 1.1.3 has no `include_reasoning` field; `model_kwargs` passes it through to `groq` 0.37.1 `chat.completions.create`, which accepts it. Groq's docs say it can't be combined with `reasoning_format`; `langchain-groq` always sends `reasoning_format=None`, and Groq accepts that.
+- One call each on `gpt-oss-20b`: with `include_reasoning=False`, 0 streamed chunks carried `reasoning_content`, first token 350 ms. Without it, 7 chunks did, first token 513 ms. In neither case did reasoning appear in the answer text (`langchain-groq` keeps it in `additional_kwargs`), so the flag saves tokens and time rather than preventing a leak. These are single samples, not a benchmark.
+- The daily token limit's 429 message contains "tokens per day (TPD)"; the daily request limit shows as `x-ratelimit-remaining-requests: 0` (Groq docs: that header always counts requests per day). Classification: daily if either, else per minute.
+**Decision:**
+- `max_retries=0` (the default of 2 would retry a 429 before falling back to the second model); `timeout=30`.
+- `stream_answer(question, sources)` returns `(model, pieces)` only after the first text piece arrives, so every fallback decision happens before anything is streamed. It raises `LLMError` with `daily_limit` / `llm_busy` / `llm_error`. A non-429 failure before the first token is `llm_error` with no fallback (TRD §8.4 step 5). The iterator raises `LLMError("llm_error")` if the stream breaks later, and closing it drops the Groq connection.
+- The system prompt builds its refusal sentence from `config.REFUSAL`, so the refusal check in step 10 compares against the same string.
+- Startup now also fails without `GROQ_API_KEY`.
+**Affects:** `backend/app/llm.py`, `backend/app/main.py`, `backend/requirements.txt` (`langchain-groq==1.1.3`), tests.
+
+## 2026-09-27 — Document endpoints and worker (step 9)
+**Context:** BACKEND_SCHEMA §5–7 define the routes, codes and check order. Some implementation choices were left open.
+**Decision:**
+- **Dependency added (owner approved):** `python-multipart==0.0.32`. FastAPI and Starlette can't parse multipart without it.
+- **Error handling:** one `ERRORS` table maps each code to its HTTP status and a fallback message (copy from APP_FLOW). Every route raises `ApiError(code)`, and `UploadError` and FastAPI validation errors are mapped to the same `{code, message}` body. Unknown routes keep FastAPI's default 404.
+- **Workspace header:** `X-Workspace-Id` must parse as a UUID with version 4, and it is normalised to canonical lowercase so any accepted spelling maps to one workspace.
+- **Qdrant down:** a route that needs Qdrant returns 503 `unavailable` when `store.ensure_ready()` fails. BACKEND_SCHEMA §5 lists `unavailable` only for `/health`; using it on the document routes adds no new code.
+- **Upload size cap:**
+  - A `Content-Length` over 25 MB + 64 KB is rejected before any of the body is read.
+  - Otherwise the body goes through a counting stream into Starlette's `MultiPartParser` (`max_files=1`, `max_fields=0`), which raises 413 the moment the cap is passed, and the exact file size is checked again after parsing.
+  - Verified on a real server: a 40 MB chunked upload with no `Content-Length` got 413 and the app stored nothing past the cap. uvicorn still received and discarded the rest of the body, so disk and memory stay bounded but bandwidth does not.
+- **Temp files:** uploads go to `/tmp/coursemind/`, and sha256 is computed while writing. `register()` deletes the file unless a job took it, and the worker deletes it in `finally`. Startup empties the folder, because leftovers belong to records the sweep marks interrupted.
+- **File names:** client paths are stripped (`C:\Users\me\Lecture 1.pdf` → `Lecture 1.pdf`) and names are capped at 200 chars, keeping the extension.
+- **Re-queued failed document:** keeps its original name.
+- **Rate limiter:** sliding window per (IP, bucket), in memory. The IP is the first `X-Forwarded-For` entry, as BACKEND_SCHEMA §6 specifies. **Risk to check at deploy (step 17):** if Render appends to a client-sent `X-Forwarded-For` rather than replacing it, the first entry can be spoofed to dodge the limit; then use the entry Render adds.
+**Affects:** `backend/app/main.py`, `backend/app/store.py` (`count_documents`, `count_chunks`), `backend/requirements.txt`, `backend/tests/test_documents_api.py`.

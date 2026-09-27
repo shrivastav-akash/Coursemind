@@ -1,18 +1,24 @@
 import logging
 import threading
+import time
 from datetime import UTC, datetime
 from functools import cache
+from itertools import batched
+from pathlib import Path
 from typing import TypedDict, cast
+from uuid import uuid5
 
 from qdrant_client import QdrantClient, models
 
 from app import config
-from app.schemas import DocErrorCode, DocType, Status
+from app.parsing import chunk_sections, parse
+from app.schemas import DocErrorCode, DocType, RetrievalMode, Source, Status
 
 log = logging.getLogger(__name__)
 
 DOCUMENTS = "documents"
 CHUNKS = "chunks"
+UPSERT_BATCH = 16  # TRD §7.2
 
 
 class Record(TypedDict):
@@ -167,6 +173,15 @@ def list_documents(workspace_id: str) -> list[Record]:
     return sorted(records, key=lambda r: r["created_at"], reverse=True)
 
 
+def count_documents(workspace_id: str) -> int:
+    return client().count(DOCUMENTS, count_filter=models.Filter(must=[_workspace(workspace_id)]), exact=True).count
+
+
+def count_chunks() -> int:
+    """All chunks in the cluster, every workspace: guards the free tier's MAX_TOTAL_CHUNKS."""
+    return client().count(CHUNKS, exact=True).count
+
+
 def set_status(doc_id: str, status: Status, error_code: DocErrorCode | None = None, chunks: int | None = None) -> None:
     if (status == "failed") != (error_code is not None):
         raise ValueError("error_code is required for failed and forbidden otherwise")
@@ -178,3 +193,104 @@ def set_status(doc_id: str, status: Status, error_code: DocErrorCode | None = No
 
 def delete_record(doc_id: str) -> None:
     client().delete(DOCUMENTS, points_selector=[doc_id], wait=True)
+
+
+def delete_document(workspace_id: str, doc_id: str) -> None:
+    # Record first: if the chunk delete then fails, retrieval never searches the leftovers,
+    # because it only looks at doc ids that are `ready` in the registry (BACKEND_SCHEMA §2).
+    delete_record(doc_id)
+    _delete_chunks(workspace_id, doc_id)
+
+
+# --- Ingest --------------------------------------------------------------------------------
+
+def _doc_filter(workspace_id: str, doc_id: str) -> models.Filter:
+    return models.Filter(must=[
+        _workspace(workspace_id), models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id)),
+    ])
+
+
+def _delete_chunks(workspace_id: str, doc_id: str) -> None:
+    client().delete(CHUNKS, points_selector=_doc_filter(workspace_id, doc_id), wait=True)
+
+
+def ingest(record: Record, path: Path | str) -> None:
+    """Worker job (TRD §7.2): parse, chunk, embed via Cloud Inference, mark ready or failed.
+
+    The caller owns `path` and deletes it afterwards (sample files must not be deleted).
+    """
+    doc_id, workspace_id = record["id"], record["workspace_id"]
+    started = time.perf_counter()
+    set_status(doc_id, "processing")
+    try:
+        chunks = chunk_sections(parse(path, record["type"]), config.CHUNK_SIZE, config.CHUNK_OVERLAP)
+        if not chunks:
+            set_status(doc_id, "failed", error_code="no_text")
+            log.info("ingest %s: no text", doc_id)
+            return
+        _delete_chunks(workspace_id, doc_id)  # re-processing never mixes old and new passages
+        points = [
+            models.PointStruct(
+                id=str(uuid5(config.ID_NAMESPACE, f"{doc_id}:{c.chunk_index}")),
+                vector={
+                    "dense": models.Document(text=c.text, model=config.DENSE_MODEL),
+                    "sparse": models.Document(text=c.text, model=config.SPARSE_MODEL),
+                    "colbert": models.Document(text=c.text, model=config.COLBERT_MODEL),
+                },
+                payload={
+                    "workspace_id": workspace_id, "doc_id": doc_id, "doc_name": record["name"],
+                    "doc_type": record["type"], "location": c.location, "order": c.order,
+                    "chunk_index": c.chunk_index, "text": c.text,
+                },
+            )
+            for c in chunks
+        ]
+        for batch in batched(points, UPSERT_BATCH):
+            client().upsert(CHUNKS, list(batch), wait=True)
+        set_status(doc_id, "ready", chunks=len(chunks))
+        log.info("ingest %s: %d chunks in %.1f s", doc_id, len(chunks), time.perf_counter() - started)
+    except Exception:
+        log.exception("ingest %s failed", doc_id)
+        try:
+            _delete_chunks(workspace_id, doc_id)
+        except Exception:
+            log.warning("ingest %s: could not remove partial chunks", doc_id)
+        set_status(doc_id, "failed", error_code="unreadable")
+
+
+# --- Retrieval -----------------------------------------------------------------------------
+
+def retrieve(question: str, workspace_id: str, ready_ids: list[str], mode: RetrievalMode, k: int) -> list[Source]:
+    """One Qdrant query (TRD §8.2), scoped to the workspace's ready documents in every stage."""
+    if not ready_ids:
+        return []
+    scope = models.Filter(must=[
+        _workspace(workspace_id), models.FieldCondition(key="doc_id", match=models.MatchAny(any=ready_ids)),
+    ])
+    dense = models.Document(text=question, model=config.DENSE_MODEL)
+    if mode == "dense":
+        points = client().query_points(CHUNKS, query=dense, using="dense", query_filter=scope, limit=k).points
+    else:
+        prefetch = [
+            models.Prefetch(query=dense, using="dense", filter=scope, limit=config.PREFETCH_K),
+            models.Prefetch(
+                query=models.Document(text=question, model=config.SPARSE_MODEL), using="sparse",
+                filter=scope, limit=config.PREFETCH_K,
+            ),
+        ]
+        if mode == "hybrid":
+            query: models.FusionQuery | models.Document = models.FusionQuery(fusion=models.Fusion.RRF)
+            using = None
+        else:  # hybrid_rerank: ColBERT MaxSim re-scores the union of both candidate lists
+            query, using = models.Document(text=question, model=config.COLBERT_MODEL), "colbert"
+        points = client().query_points(
+            CHUNKS, prefetch=prefetch, query=query, using=using, query_filter=scope, limit=k,
+        ).points
+    return [
+        Source(
+            n=i, doc_id=p.payload["doc_id"], doc_name=p.payload["doc_name"], doc_type=p.payload["doc_type"],
+            location=p.payload["location"], text=p.payload["text"],
+        )
+        for i, p in enumerate(points, start=1)
+        if p.payload
+    ]
