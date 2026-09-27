@@ -3,25 +3,27 @@
 Filled at the end of every session so the next one starts cold without questions. Replace the contents each time; git history keeps the old ones.
 
 **Date:** 2026-09-27
-**Step:** 4 — Upload validation (Phase 0 complete)
-**Status:** done, awaiting owner review (not committed)
+**Step:** 5 — Qdrant spike (decision gate)
+**Status:** done, gate passed; awaiting owner review (not committed)
 
 ## Changed
-- `app/parsing.py`: `UploadError(code)`; `detect_type(path, filename) -> DocType` (`.doc`/`.ppt` → `legacy_format`; other extensions → `unsupported_type`; PDF must start with `%PDF-`; DOCX/PPTX must be a readable ZIP containing `word/document.xml` / `ppt/presentation.xml` with declared uncompressed total ≤ 200 MB, else `bad_signature`); `parse(path, doc_type)` dispatch.
-- `tests/test_parsing.py`: 17 new parametrized cases: 3 formats detected + parsed (upper-case extensions too); 5 extension rejections; 9 `bad_signature` cases (renamed text, empty files, PDF↔DOCX↔PPTX swaps, corrupt ZIP header, fake ZIP bomb).
-- No new dependencies.
+- `qdrant-client==1.19.1` pinned in `requirements.txt`.
+- `backend/scripts/spike_qdrant.py` (run: `cd backend && .venv/bin/python -m scripts.spike_qdrant [pdf]`). It uses random-suffix throwaway collections and deletes them in `finally`.
+- Results and gate decision in DECISIONS.md: `hybrid_rerank` median 717–774 ms, 50-page ingest ~23 s. The TRD design is kept.
 
 ## Verified
-- `pytest -q` → `26 passed`.
-- Mutation check: removing the ZIP-bomb cap, the `NotImplementedError` catch, or the main-part check each makes a test fail.
-- Fuzzed 20,000 corrupted DOCX files: `zipfile` only raised `BadZipFile` or `NotImplementedError`, and both are handled.
+- Two full runs; both print `Cleanup: done` (no spike collections left on the cluster).
+- Chunks schema from BACKEND_SCHEMA §4 (dense 384 cosine, BM25 sparse with IDF, ColBERT multivector MAX_SIM with `m=0`, on-disk, float16) is accepted by the cluster, and all three Cloud Inference models work on the free tier.
+- Payload-only collection (`vectors_config={}`) works for the `documents` registry.
 
 ## Pending
-- Owner OK, then commit: `feat: upload validation`.
-- Secrets (`GROQ_API_KEY`, `QDRANT_*`) are not required at startup yet. Add a fail-fast check when steps 6 and 8 start using them.
+- **Owner decision: cluster region.** The cluster is in AWS `sa-east-1` (São Paulo); Render has no South American region. The cluster is empty, so switching is cheap now and costly later. See the chat for options.
+- Owner OK, then commit: `feat: Qdrant spike`.
+- `backend/.env` is mode 664 (group-readable); `chmod 600 backend/.env` is safer.
+- Secrets are not required at startup yet. Add a fail-fast check in step 6 (Qdrant) and step 8 (Groq).
 
 ## Known issues
-- A ZIP whose index is valid but whose content is corrupt passes `detect_type` and fails later in parsing. The step 7 worker maps that to `unreadable`, as TRD §7.2 specifies.
+- Latency numbers were measured from India, not from Render. Re-measure from the deployed service in step 17.
 
 ## Next step
-- Phase 1, step 5 — Qdrant spike. **Owner first:** create a free Qdrant Cloud cluster (region near the planned Render region), confirm the three Inference models show "Cost: Free", create an API key, and put `QDRANT_URL` / `QDRANT_API_KEY` in `backend/.env` (never in chat or git).
+- Step 6 — Collections and document registry (`store.py`, startup lifespan, `/health` pings Qdrant, `live`-marked tests). Starts after the region decision and owner review.

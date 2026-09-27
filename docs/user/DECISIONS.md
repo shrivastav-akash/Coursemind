@@ -53,3 +53,22 @@ One entry per decision made during the build, newest at the bottom. Decisions ma
 - PDF must start with `%PDF-` at byte 0, as specified. Some real PDFs have junk before the header (the PDF spec allows up to 1 KB); if uploads fail on that, widen the check to the first 1,024 bytes.
 **Why:** Keeps the spec's code list unchanged and gives the visitor true error copy.
 **Affects:** `backend/app/parsing.py`, `backend/tests/test_parsing.py`.
+
+## 2026-09-27 — Qdrant spike (step 5 gate): keep the TRD design
+**Context:** IMPLEMENTATION_PLAN step 5 gate: keep `hybrid_rerank` only if the median query is under 1 s and a 50-page ingest is under 60 s.
+**Setup:** `scripts/spike_qdrant.py`, run twice from the owner's machine (India, IST) against the free cluster in AWS `sa-east-1` (São Paulo). The PDF was the first 50 pages of `foo2zjs manual.pdf` → 130 chunks (700/100), upserted in batches of 16 with all three models via Cloud Inference. There were 10 questions per mode, `TOP_K=4`, `PREFETCH_K=20`, and the workspace + doc filter was applied on every prefetch and on the outer query.
+
+| Measure | Run 1 | Run 2 |
+|---|---|---|
+| Network round trip (`get_collections`, median) | 408 ms | 335 ms |
+| Ingest, 50 pages (parse 73 ms + upsert) | 22.9 s | 23.2 s |
+| Upsert per 16-chunk batch (median) | 2.66 s | 2.79 s |
+| `dense` query (median) | 564 ms | 560 ms |
+| `hybrid` query (median) | 584 ms | 567 ms |
+| `hybrid_rerank` query (median, max) | 774 ms (922) | 717 ms (818) |
+| Payload-only collection (`vectors_config={}`) upsert + retrieve | ok | ok |
+
+**Decision:** Gate passes on both runs. Keep `RETRIEVAL_MODE=hybrid_rerank` and `PREFETCH_K=20`.
+**Why:** 717–774 ms < 1 s and ~23 s < 60 s, measured with the worst-case network path (India ↔ São Paulo). Roughly 335–408 ms of each query is network round trip, so the Qdrant-side cost of `hybrid_rerank` is about 0.4 s (an estimate: query time minus measured round trip).
+**Open:** Render has no South American region (Oregon, Ohio, Virginia, Frankfurt, Singapore). The cluster region vs Render region choice is pending with the owner (see HANDOVER).
+**Affects:** `backend/scripts/spike_qdrant.py`, `backend/requirements.txt` (`qdrant-client==1.19.1`), ARCHITECTURE.

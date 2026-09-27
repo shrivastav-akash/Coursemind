@@ -2,7 +2,7 @@
 
 Living map of the code. **Update this file whenever a folder, module, or connection is added or changes.** Status: `planned` = not built yet, `exists` = in the repo.
 
-_Last updated: 2026-09-27 (step 4: upload validation; Phase 0 complete)_
+_Last updated: 2026-09-27 (step 5: Qdrant spike)_
 
 ## How the pieces connect
 
@@ -45,7 +45,7 @@ Data shapes and endpoint details: [BACKEND_SCHEMA.md](BACKEND_SCHEMA.md). Design
 | `backend/app/store.py` | Qdrant collections, registry, ingest, retrieval, delete | planned (steps 6–7) |
 | `backend/app/llm.py` | Prompt, Groq streaming, rate-limit handling | planned (step 8) |
 | `backend/tests/` | Offline tests + `live`-marked tests | exists: `test_api.py`, `test_parsing.py` |
-| `backend/scripts/spike_qdrant.py` | One-off performance spike | planned (step 5) |
+| `backend/scripts/spike_qdrant.py` | One-off performance spike (`python -m scripts.spike_qdrant`) | exists |
 | `backend/samples/` | 3 publishable sample files | planned (step 15, owner provides) |
 | `backend/eval/` | `qa.json`, `run_eval.py`, `results.md` | planned (step 16) |
 | `frontend/app/` | `layout.tsx`, `page.tsx` | planned (step 11) |
@@ -57,7 +57,7 @@ Data shapes and endpoint details: [BACKEND_SCHEMA.md](BACKEND_SCHEMA.md). Design
 
 | Service | Used for | Config (env) |
 |---|---|---|
-| Qdrant Cloud (free) | Storage, embeddings, hybrid search, re-rank | `QDRANT_URL`, `QDRANT_API_KEY` |
+| Qdrant Cloud (free, AWS `sa-east-1` São Paulo) | Storage, embeddings, hybrid search, re-rank | `QDRANT_URL`, `QDRANT_API_KEY` |
 | Groq (free) | Answer generation | `GROQ_API_KEY`, `LLM_MODELS` |
 | Render (free) | Backend hosting | Render env vars |
 | Netlify (free) | Frontend hosting | `NEXT_PUBLIC_API_URL` |
