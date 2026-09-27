@@ -9,7 +9,7 @@ from app.config import MAX_UNZIPPED_MB
 from app.parsing import (
     Section, UploadError, chunk_sections, detect_type, parse, parse_docx, parse_pdf, parse_pptx,
 )
-from tests.files import make_pdf
+from tests.files import make_docx, make_pdf, make_pptx
 
 
 def test_pdf_one_section_per_page(tmp_path):
@@ -133,20 +133,6 @@ def test_pptx_slides_tables_nested_groups_and_notes(tmp_path):
     assert sections[1].text.split("\n") == ["Algorithm | Avoids", "Banker's | safe state | deadlock", "Nested group text"]
     assert sections[2].text == ""
     assert {c.location for c in chunk_sections(sections, size=700, overlap=100)} == {"slide 1", "slide 2"}
-
-
-def make_docx(path):
-    doc = docx.Document()
-    doc.add_paragraph("Some notes.")
-    doc.save(str(path))
-    return path
-
-
-def make_pptx(path):
-    prs = Presentation()
-    prs.slides.add_slide(prs.slide_layouts[6])
-    prs.save(str(path))
-    return path
 
 
 def make_text(path):

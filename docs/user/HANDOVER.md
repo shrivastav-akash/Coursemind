@@ -3,30 +3,46 @@
 Filled at the end of every session so the next one starts cold without questions. Replace the contents each time; git history keeps the old ones.
 
 **Date:** 2026-09-27
-**Step:** 14 — States, accessibility, mobile (**Milestone B reached**: full app working locally)
+**Step:** 15 — Sample documents (Phase 4)
 **Status:** done, awaiting owner review (not committed)
 
 ## Changed
-- Global focus ring (unlayered CSS), 44 px touch targets on coarse pointers, reduced-motion spinner (static Clock), `--scrim` token for overlays, `aria-hidden` on decorative shadcn icons, focus moves to "Add files" when a focused row disappears, `app/not-found.tsx` (S13).
-- LCP fix: static HTML prerendered as a first visit; returning visitors hidden from it by an inline `<head>` script + CSS; library fetched alongside `/health`.
+- Backend: `POST /documents/samples` adds the 3 files in `backend/samples/` once per workspace. It returns 202 if anything was queued and 200 if all were already there. It follows the upload limits, and each file is enqueued as a temp copy.
+- Frontend:
+  - "Try sample documents" is wired, with J2 toasts and a spinner.
+  - It is disabled at 28+ documents and while the server isn't ready.
+  - 3 suggested questions (`lib/samples.ts`) show while the library holds only samples and one is Ready.
+  - Answers render `inline code` in mono.
 
 ## Verified
-- Lighthouse (gzip, local backend): mobile 98 / 100 / 100 (LCP 2.3 s, CLS 0.001), desktop 100 / 100 / 100, dark-mode accessibility 100.
-- UI_UX_BRIEF §9 checklist verified item by item (DECISIONS, step 14); keyboard-only pass; dialog and sheet focus behaviour; states `unreadable`, over 25 MB, `interrupted`; 404 page; 320 px dark; reduced motion via headless Chrome.
-- `npm test` 8/8, `tsc`, `eslint`, build clean; backend `pytest -m "not live"` 93 passed. Cluster left empty.
+- Real browser, fresh workspace:
+  - 3 samples reached Ready (10 / 25 / 11 passages).
+  - The two-document suggestion streamed an answer citing the DOCX and the PPTX.
+  - A second click gave "already in your library" with no duplicates.
+- 375 px has no horizontal scroll.
+- Test suites:
+  - Frontend: `npm test` 9/9; `tsc`, `eslint` and the build are clean.
+  - Backend: `pytest -m "not live"` 98 passed.
+- Cluster left empty.
 
 ## Pending
-- Not triggered live: "Couldn't load your documents.", `workspace_full` / `storage_full` rows, "delete failed" toast (see DECISIONS).
-- UI_UX_BRIEF §9 boxes are not ticked in the brief itself (approved doc); results are recorded in DECISIONS. Tick them if the owner wants.
-- Step 15: owner puts 3 publishable sample files (PDF, PPTX, DOCX, same course topic) in `backend/samples/`; then wire "Try sample documents", disable it at 28+ documents, suggested questions.
-- Step 16: two-document questions in `qa.json`; tune `SECOND_DOC_RATIO`; over-cautious refusals and claims beyond sources.
-- Step 17: `NEXT_PUBLIC_API_URL` on Netlify (serves gzip/brotli; Lighthouse numbers above assume compression); Render in Oregon; `X-Forwarded-For` check; latency from Render.
+- Not triggered live:
+  - the 28+ disabled state;
+  - `workspace_full` / `storage_full` / rate limit on samples (backend tests cover them);
+  - from step 14: "Couldn't load your documents." and the "delete failed" toast.
+- **Owner:** the sample files are already committed. Confirm `git-cheat-sheet.pdf` may be published (licence / source) before the repo goes public.
+- Step 16: evaluation. Add two-document questions to `qa.json` (the 3 suggestions are a starting point), tune `SECOND_DOC_RATIO`, and review over-cautious refusals and claims beyond the sources.
+- Step 17 (deploy):
+  - Netlify: set `NEXT_PUBLIC_API_URL` (Netlify serves gzip/brotli).
+  - Render: Oregon region.
+  - Check `X-Forwarded-For`.
+  - Measure latency from Render.
 - Owner may want BACKEND_SCHEMA §5 to list `unavailable` on `/documents` and `/ask`.
-- Commit (owner): suggested `feat: accessibility, states, and first-paint performance`.
+- Commit (owner): suggested `feat: sample documents and suggested questions`.
 
 ## Known issues
 - Firefox has no `field-sizing: content`, so the question box stays one line and scrolls there.
 - Model output quality items for step 16 (refusals, claims beyond sources).
 
 ## Next step
-- Phase 4, step 15 — Sample documents. **Owner first:** add three files you may publish to `backend/samples/` (one PDF, one .pptx, one .docx, ideally on the same course topic).
+- Phase 4, step 16 — Evaluation.

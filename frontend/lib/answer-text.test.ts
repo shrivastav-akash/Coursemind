@@ -80,3 +80,21 @@ test("an indented line continues the list item above it", () => {
     },
   ]);
 });
+
+test("inline code keeps its brackets and asterisks literal, inside bold too", () => {
+  assert.deepEqual(parseInline("Run `git stash` then `arr[1]` [2].", sources), [
+    { text: "Run " },
+    { text: "git stash", code: true },
+    { text: " then " },
+    { text: "arr[1]", code: true },
+    { text: " " },
+    { cite: 2 },
+    { text: "." },
+  ]);
+  assert.deepEqual(parseInline("**Recovering with `git reflog`**", sources), [
+    { text: "Recovering with ", bold: true },
+    { text: "git reflog", bold: true, code: true },
+  ]);
+  // Unclosed while streaming: stays literal until the closing backtick arrives.
+  assert.deepEqual(parseInline("Use `git sta", sources), [{ text: "Use `git sta" }]);
+});

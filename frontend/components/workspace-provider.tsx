@@ -115,6 +115,8 @@ interface WorkspaceValue {
   removeLocal: (key: string) => void;
   requestDelete: (doc: Document) => void;
   removeFailed: (doc: Document) => void;
+  addSamples: () => void;
+  addingSamples: boolean;
   flashId: string | null;
   dragging: boolean;
   hasDocuments: boolean;
@@ -140,6 +142,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [dragging, setDragging] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [addingSamples, setAddingSamples] = useState(false);
 
   const documentsRef = useRef<Document[]>([]);
   const queue = useRef<LocalRow[]>([]);
@@ -303,6 +306,28 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [serverGone],
   );
 
+  const addSamples = useCallback(async () => {
+    if (addingSamples) return;
+    setAddingSamples(true);
+    try {
+      const { documents: samples, added } = await api.addSamples();
+      setDocuments((prev) => {
+        const byId = new Map(samples.map((s) => [s.id, s]));
+        const updated = prev.map((d) => byId.get(d.id) ?? d);
+        return [...samples.filter((s) => !prev.some((d) => d.id === s.id)), ...updated];
+      });
+      toast.add({ title: added ? COPY.samplesAdded : COPY.samplesAlreadyAdded });
+      // The first-visit block holding the button is replaced by the list.
+      refocusIfLost();
+    } catch (err) {
+      serverGone(err);
+      const code = err instanceof api.ApiError ? err.code : "network";
+      toast.add({ title: UPLOAD_ERROR_COPY[code] ?? (err instanceof api.ApiError ? err.message : UPLOAD_ERROR_COPY.network) });
+    } finally {
+      setAddingSamples(false);
+    }
+  }, [addingSamples, serverGone]);
+
   const confirmDelete = async () => {
     setDeleteOpen(false);
     if (deleteTarget && (await deleteOnServer(deleteTarget))) toast.add({ title: COPY.deleted(deleteTarget.name) });
@@ -377,12 +402,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setDeleteOpen(true);
       },
       removeFailed: (doc) => void deleteOnServer(doc),
+      addSamples: () => void addSamples(),
+      addingSamples,
       flashId,
       dragging,
       hasDocuments,
       lockReason,
     }),
-    [server, recheck, documents, localRows, libraryState, firstVisit, refresh, retryUpload, removeLocal, deleteOnServer, flashId, dragging, hasDocuments, lockReason],
+    [server, recheck, documents, localRows, libraryState, firstVisit, refresh, retryUpload, removeLocal, deleteOnServer, addSamples, addingSamples, flashId, dragging, hasDocuments, lockReason],
   );
 
   return (

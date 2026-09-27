@@ -1,8 +1,8 @@
 // Turns the streamed answer into blocks for display. Parsed from the whole accumulated text on
 // every update, because citation markers arrive split across pieces ("[", "1", "]").
-// ponytail: a small Markdown subset (paragraphs, lists, **bold**, *emphasis*); a Markdown library if answers need more.
+// ponytail: a small Markdown subset (paragraphs, lists, **bold**, *emphasis*, `code`); a Markdown library if answers need more.
 
-export type Inline = { text: string; bold?: boolean } | { cite: number };
+export type Inline = { text: string; bold?: boolean; code?: boolean } | { cite: number };
 export type Block = { kind: "p"; inlines: Inline[] } | { kind: "ul" | "ol"; items: Inline[][] };
 
 const LIST_ITEM = /^\s*(?:([-*•])|(\d+)[.)])\s+(.*)$/;
@@ -11,6 +11,8 @@ const HEADING = /^\s*#{1,6}\s+(.*)$/;
 const EMPHASIS = /\*\*(.+?)\*\*|\*(\S(?:[^*]*\S)?)\*/g;
 // [2], 【2】 (the model sometimes uses full-width brackets), and grouped forms like [1, 2].
 const CITATION = /[[【]\s*(\d+(?:\s*[,，]\s*\d+)*)\s*[\]】]/g;
+// `code` renders in the mono face (UI_UX_BRIEF §3.2); brackets inside it are code, not citations.
+const CODE = /`([^`\n]+)`/g;
 
 export function parseAnswer(text: string, sourceNumbers: ReadonlySet<number>): Block[] {
   const blocks: Block[] = [];
@@ -60,12 +62,22 @@ export function parseInline(text: string, sourceNumbers: ReadonlySet<number>): I
   const out: Inline[] = [];
   let last = 0;
   for (const match of text.matchAll(EMPHASIS)) {
-    pushCitations(out, text.slice(last, match.index), false, sourceNumbers);
-    pushCitations(out, match[1] ?? match[2], true, sourceNumbers);
+    pushCode(out, text.slice(last, match.index), false, sourceNumbers);
+    pushCode(out, match[1] ?? match[2], true, sourceNumbers);
     last = match.index + match[0].length;
   }
-  pushCitations(out, text.slice(last), false, sourceNumbers);
+  pushCode(out, text.slice(last), false, sourceNumbers);
   return out;
+}
+
+function pushCode(out: Inline[], text: string, bold: boolean, sourceNumbers: ReadonlySet<number>) {
+  let last = 0;
+  for (const match of text.matchAll(CODE)) {
+    pushCitations(out, text.slice(last, match.index), bold, sourceNumbers);
+    out.push(bold ? { text: match[1], bold, code: true } : { text: match[1], code: true });
+    last = match.index + match[0].length;
+  }
+  pushCitations(out, text.slice(last), bold, sourceNumbers);
 }
 
 function pushCitations(out: Inline[], text: string, bold: boolean, sourceNumbers: ReadonlySet<number>) {
@@ -83,6 +95,6 @@ function pushCitations(out: Inline[], text: string, bold: boolean, sourceNumbers
 function pushText(out: Inline[], text: string, bold: boolean) {
   if (!text) return;
   const prev = out.at(-1);
-  if (prev && "text" in prev && Boolean(prev.bold) === bold) prev.text += text;
+  if (prev && "text" in prev && !prev.code && Boolean(prev.bold) === bold) prev.text += text;
   else out.push(bold ? { text, bold } : { text });
 }

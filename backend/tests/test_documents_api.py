@@ -5,7 +5,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import config, main, store
-from tests.files import make_pdf
+from app.parsing import chunk_sections, detect_type, parse
+from tests.files import make_docx, make_pdf, make_pptx
 
 WS, OTHER_WS = str(uuid4()), str(uuid4())
 
@@ -317,3 +318,76 @@ def test_rate_limiter_window_slides(monkeypatch):
     assert limiter.hit(("other-ip", "b"), 2, 60) == 0
     now[0] += 30
     assert limiter.hit(("ip", "b"), 2, 60) == 0
+
+
+# --- Sample documents -----------------------------------------------------------------------
+
+@pytest.fixture
+def samples(api, monkeypatch, tmp_path):
+    folder = tmp_path / "samples"
+    folder.mkdir()
+    make_pdf(folder / "Cheat Sheet.pdf", ["git stash saves work."])
+    make_docx(folder / "Guide.docx", "git revert makes an inverse commit.")
+    make_pptx(folder / "Slides.pptx", "Branching")
+    monkeypatch.setattr(main, "SAMPLES_DIR", folder)
+    return folder
+
+
+def add_samples(api, workspace_id=WS):
+    return api.client.post("/documents/samples", headers={"X-Workspace-Id": workspace_id})
+
+
+def test_samples_are_added_once(api, samples):
+    first = add_samples(api)
+
+    assert first.status_code == 202
+    assert sorted(d["name"] for d in first.json()) == ["Cheat Sheet.pdf", "Guide.docx", "Slides.pptx"]
+    assert all(d["is_sample"] and d["status"] == "queued" for d in first.json())
+    assert len(api.jobs) == 3
+    # Jobs get temp copies (the worker deletes them); the sample files themselves stay.
+    assert all(path.parent == api.tmp for _, _, path in api.jobs)
+    assert len(list(samples.iterdir())) == 3
+
+    again = add_samples(api)
+
+    assert again.status_code == 200 and sorted(d["id"] for d in again.json()) == sorted(d["id"] for d in first.json())
+    assert len(api.jobs) == 3
+
+
+def test_failed_sample_is_requeued(api, samples):
+    doc_id = add_samples(api).json()[0]["id"]
+    api.set_status(doc_id, "failed", error_code="interrupted")
+
+    response = add_samples(api)
+
+    assert response.status_code == 202
+    assert api.records[doc_id]["status"] == "queued" and len(api.jobs) == 4
+
+
+def test_samples_need_room_for_the_missing_ones(api, samples, monkeypatch):
+    monkeypatch.setattr(store, "count_documents", lambda _ws: config.MAX_DOCS_PER_WORKSPACE - 2)
+
+    response = add_samples(api)
+
+    assert (response.status_code, response.json()["code"]) == (409, "workspace_full")
+    assert api.records == {} and api.jobs == []
+
+
+def test_samples_respect_storage_and_rate_limits(api, samples, monkeypatch):
+    api.total_chunks = config.MAX_TOTAL_CHUNKS
+    assert (add_samples(api).status_code, add_samples(api).json()["code"]) == (503, "storage_full")
+
+    api.total_chunks = 0
+    monkeypatch.setattr(config, "UPLOAD_LIMIT", (1, 3600))
+    monkeypatch.setattr(main, "limiter", main.RateLimiter())
+    assert add_samples(api).status_code == 202  # all three count as one upload
+    assert add_samples(api).json()["code"] == "upload_rate_limited"
+
+
+def test_committed_sample_files_are_valid():
+    """Guards deploys: every file in backend/samples/ passes the upload checks and has text."""
+    files = [p for p in main.SAMPLES_DIR.iterdir() if p.is_file() and not p.name.startswith(".")]
+    assert len(files) == 3
+    for path in files:
+        doc_type = detect_type(path, path.name)
+        assert chunk_sections(parse(path, doc_type), config.CHUNK_SIZE, config.CHUNK_OVERLAP), path.name

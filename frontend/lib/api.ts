@@ -57,6 +57,12 @@ export async function uploadDocument(file: File): Promise<{ document: Document; 
   return { document: await response.json(), duplicate: response.status === 200 };
 }
 
+/** 202 = at least one sample added or re-queued; 200 = all were already in the workspace. */
+export async function addSamples(): Promise<{ documents: Document[]; added: boolean }> {
+  const response = await call("/documents/samples", { method: "POST" });
+  return { documents: await response.json(), added: response.status === 202 };
+}
+
 export async function deleteDocument(id: string): Promise<void> {
   await call(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

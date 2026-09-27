@@ -322,3 +322,32 @@ Before the fix, mobile gzip was 94 with LCP 3.0 s. The uncompressed python serve
 **APP_FLOW §5 states verified live:** all library row states, including new this step `unreadable`, over 25 MB (client) and `interrupted` (backend stopped mid-ingest, then swept); server starting / unreachable; answer states (step 13); 404.
 **Not verified live:** "Couldn't load your documents." (needs `/documents` to fail while `/health` succeeds; the logic is covered by reading, not triggered); `workspace_full` / `storage_full` rows (backend tests cover the codes; the UI uses the copy table); "delete failed" toast.
 **Affects:** `frontend/app/{globals.css,layout.tsx,not-found.tsx}`, `frontend/components/{workspace-provider,library,first-visit,answer,app-header}.tsx`, `frontend/components/ui/{button,spinner,sheet,alert-dialog,message-scroller}.tsx`, `frontend/lib/workspace.ts`.
+
+## 2026-09-27 — Sample documents and suggested questions (step 15)
+**Decision:**
+- `POST /documents/samples` registers the 3 files in `backend/samples/` with the same id rule as uploads (`uuid5(workspace:sha256)`), so a second click adds nothing and returns 200 ("Sample documents are already in your library."). A failed sample is re-queued. Limits: `workspace_full` counts only the missing samples; `storage_full` and the upload rate limit apply (one upload per call).
+- The ingest worker deletes the file it processes, so each sample is enqueued as a temp copy; `backend/samples/` is never touched.
+- "Try sample documents" is disabled at 28+ documents with "Your library is almost full (30 documents max).", and while the server isn't ready. It shows a spinner during the request; repeat clicks are ignored.
+- Suggested questions (`frontend/lib/samples.ts`) appear under "Ask a question about your documents." while every document is a sample, none is uploading, and at least one is Ready. Each one is sent exactly like a typed question; once the thread has a turn they're gone. They're GuardedButtons, so they carry the question-box lock reason if the server drops.
+  1. "What is the difference between git revert and git reset --hard?" (all three files cover it)
+  2. "How do Git-Flow and GitHub Flow branching strategies differ?" (DOCX §6.2 table)
+  3. "How do I save unfinished work with git stash, and how can git reflog recover a lost commit?" (needs two documents: stash is in all three, the reflog recovery is only in the DOCX §7)
+- Answers now render `inline code` in the mono face (UI_UX_BRIEF §3.2 already specified it; the Git samples made it visible). Brackets inside code stay code, not citations.
+
+**Why:** APP_FLOW J2 and BACKEND_SCHEMA §7. Re-adding rows in place (not moving them to the top) keeps the list still when the samples were already there.
+**Alternatives:** Copying samples into the workspace as normal uploads from the frontend (needs the files in the static build, and loses `is_sample`). A Markdown library for inline code (a regex covers the one missing case).
+
+**Verified in a real browser against the Oregon cluster and Groq:**
+- Fresh workspace, then "Try sample documents": toast "Sample documents added.", 3 Sample rows went Queued, Processing, Ready (10 / 25 / 11 passages), and focus moved to "Add files". The suggestions appeared as soon as the first file was Ready.
+- A second click: 200, toast "Sample documents are already in your library.", no duplicate rows, order kept.
+- The two-document suggestion streamed a cited answer from the DOCX (§5, §7) and the PPTX (slide 6). The revert/reset suggestion cited all three files, with code in mono.
+- At 375 px: no horizontal scroll, and the suggestion labels wrap at 52 px tall.
+- Backend logs carry ids, counts and timings only. Test documents deleted afterwards; the cluster is left empty.
+- Tests: `npm test` 9/9, `tsc`, `eslint` and the build are clean. Backend `pytest -m "not live"` gives 98 passed (5 new sample tests, including one that parses the committed sample files).
+
+**Not verified live:** the 28+ disabled state (needs 28 documents; the rule is one comparison), and `workspace_full` / `storage_full` / rate limit on samples (covered by backend tests).
+**Affects:**
+- `backend/app/main.py`, `backend/tests/{test_documents_api,test_parsing,files}.py`
+- `frontend/lib/{api,copy,limits,samples,answer-text,answer-text.test}.ts`
+- `frontend/components/{workspace-provider,library,workspace,answer}.tsx`
+

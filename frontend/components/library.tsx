@@ -22,7 +22,7 @@ import { GuardedButton } from "@/components/guarded-button";
 import { type LocalRow, useWorkspace } from "@/components/workspace-provider";
 import { COPY, DOC_ERROR_COPY } from "@/lib/copy";
 import { passages } from "@/lib/format";
-import { MAX_DOCS_PER_WORKSPACE, MAX_FILE_MB } from "@/lib/limits";
+import { MAX_DOCS_PER_WORKSPACE, MAX_FILE_MB, SAMPLES_NEED_ROOM } from "@/lib/limits";
 import type { DocType, Document } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -47,10 +47,16 @@ export function AddFilesButton() {
 }
 
 export function SampleDocumentsButton() {
-  const { server } = useWorkspace();
-  // ponytail: wired to POST /documents/samples in step 15.
+  const { server, documents, addSamples, addingSamples } = useWorkspace();
+  const reason =
+    server !== "ready"
+      ? COPY.waitingForServer
+      : documents.length > MAX_DOCS_PER_WORKSPACE - SAMPLES_NEED_ROOM
+        ? COPY.libraryAlmostFull
+        : null;
   return (
-    <GuardedButton variant="outline" reason={server === "ready" ? null : COPY.waitingForServer}>
+    <GuardedButton variant="outline" reason={reason} aria-busy={addingSamples || undefined} onClick={addSamples}>
+      {addingSamples && <Spinner data-icon="inline-start" />}
       Try sample documents
     </GuardedButton>
   );

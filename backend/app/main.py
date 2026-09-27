@@ -30,6 +30,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 log = logging.getLogger(__name__)
 
 TMP_DIR = Path(tempfile.gettempdir()) / "coursemind"
+SAMPLES_DIR = Path(__file__).resolve().parent.parent / "samples"
 MAX_FILE_BYTES = config.MAX_FILE_MB * 1024 * 1024
 FORM_OVERHEAD = 64 * 1024  # multipart boundary and part headers around the file
 MAX_NAME_CHARS = 200  # BACKEND_SCHEMA §3
@@ -208,6 +209,48 @@ async def upload_document(
     path, filename, size, sha256 = await receive_file(request)
     record, response.status_code = await run_in_threadpool(register, workspace_id, path, filename, size, sha256)
     return record
+
+
+@app.post("/documents/samples", response_model=list[Document], status_code=202, responses={200: {"model": list[Document]}})
+def add_samples(
+    request: Request, response: Response, workspace_id: str = Depends(workspace), _: None = Depends(qdrant_ready)
+):
+    """Add every file in backend/samples/ as a sample; counts as one upload (BACKEND_SCHEMA §7)."""
+    rate_limit(request, "upload", config.UPLOAD_LIMIT, "upload_rate_limited")
+    samples = []
+    for path in sorted(p for p in SAMPLES_DIR.iterdir() if p.is_file() and not p.name.startswith(".")):
+        sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+        doc_id = str(uuid5(config.ID_NAMESPACE, f"{workspace_id}:{sha256}"))
+        # detect_type raising here means a bad file was committed to samples/: a deploy error, so a 500.
+        samples.append((path, detect_type(path, path.name), sha256, doc_id, store.get_document(workspace_id, doc_id)))
+
+    missing = [s for s in samples if s[4] is None]
+    if missing:
+        if store.count_documents(workspace_id) + len(missing) > config.MAX_DOCS_PER_WORKSPACE:
+            raise ApiError("workspace_full")
+        if store.count_chunks() >= config.MAX_TOTAL_CHUNKS:
+            raise ApiError("storage_full")
+
+    records, queued = [], False
+    for path, doc_type, sha256, doc_id, record in samples:
+        if record is not None and record["status"] != "failed":
+            records.append(record)  # already in this workspace
+            continue
+        if record is None:
+            record = store.create_document(workspace_id, doc_id, path.name, doc_type, path.stat().st_size, sha256, is_sample=True)
+        else:
+            store.set_status(doc_id, "queued")
+            record["status"], record["error_code"] = "queued", None
+        # The worker deletes the file it is given, so it gets a temp copy; the sample itself stays.
+        TMP_DIR.mkdir(parents=True, exist_ok=True)
+        fd, copy_name = tempfile.mkstemp(dir=TMP_DIR)
+        with open(fd, "wb") as out:
+            out.write(path.read_bytes())
+        enqueue(workspace_id, doc_id, Path(copy_name))
+        records.append(record)
+        queued = True
+    response.status_code = 202 if queued else 200
+    return records
 
 
 @app.delete("/documents/{doc_id}", status_code=204, response_class=Response)

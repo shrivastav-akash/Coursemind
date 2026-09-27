@@ -110,12 +110,13 @@ function AnswerText({
           const source = byNumber.get(part.cite);
           return source ? <Citation key={i} source={source} open={open.has(part.cite)} onClick={() => onCite(part.cite)} /> : null;
         }
+        const text = part.code ? <code className="font-mono text-[0.9em]">{part.text}</code> : part.text;
         return part.bold ? (
           <strong key={i} className="font-bold">
-            {part.text}
+            {text}
           </strong>
         ) : (
-          <Fragment key={i}>{part.text}</Fragment>
+          <Fragment key={i}>{text}</Fragment>
         );
       })}
       {withCaret && <Caret />}
