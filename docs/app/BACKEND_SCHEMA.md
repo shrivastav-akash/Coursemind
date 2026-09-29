@@ -181,7 +181,7 @@ All three reset on restart. `ponytail:` single process only; move to Redis if th
 
 | Method | Path | Auth | Input | Success output |
 |---|---|---|---|---|
-| GET | `/health` | None | — | 200 `Health` |
+| GET, HEAD | `/health` | None | — | 200 `Health` (HEAD: no body) |
 | GET | `/documents` | Workspace | — | 200 `Document[]` |
 | POST | `/documents` | Workspace | multipart `file` | 202 `Document` (new or re-queued) · 200 `Document` (already present) |
 | DELETE | `/documents/{doc_id}` | Workspace | path `doc_id` | 204 (no body) |
@@ -191,6 +191,7 @@ All three reset on restart. `ponytail:` single process only; move to Redis if th
 ### `GET /health`
 - Pings Qdrant (cheap collection lookup).
 - 200 `{"status": "ok"}`; 503 `{"code": "unavailable", "message": "…"}`.
+- Also answers `HEAD` with the same status and no body (UptimeRobot checks with HEAD).
 - Used by: header status, server banner, UptimeRobot.
 
 ### `GET /documents`

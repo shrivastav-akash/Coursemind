@@ -573,6 +573,6 @@ Before the fix, mobile gzip was 94 with LCP 3.0 s. The uncompressed python serve
 
 ## 2026-09-30 — `/health` answers HEAD (owner approved)
 **Context:** Render logs showed UptimeRobot checking `/health` with `HEAD` every ~8 minutes, and FastAPI answering `405 Method Not Allowed`. The pings still reached the service, so it stayed awake, but the monitor saw every check as a failure and its downtime emails could not be trusted.
-**Decision:** `/health` accepts `GET` and `HEAD` (`@app.api_route(..., methods=["GET", "HEAD"])`). HEAD returns the same status with no body. Test: `test_health_answers_head`.
+**Decision:** `/health` accepts `GET` and `HEAD` (`@app.api_route(..., methods=["GET", "HEAD"])`). HEAD returns the same status with no body. Test: `test_health_answers_head`. BACKEND_SCHEMA (endpoint summary and `/health` section) updated with the owner's approval.
 **Alternatives:** switch the UptimeRobot monitor to GET (a dashboard setting outside the repo, easy to lose on a new monitor).
 **Also found:** a "Starting server…" banner reported by the owner was not a cold start. The instance had not restarted, and no request from the owner's browser reached the backend at that time; a clean browser connected in 0.37 s. Likely a browser extension, VPN or network issue on the client.
