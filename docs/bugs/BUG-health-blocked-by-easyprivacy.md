@@ -1,6 +1,6 @@
 # BUG: app stuck on "Starting server…" for ad-blocker users
 
-**Found:** 2026-09-30 · **Status:** fixed in code, awaiting deploy
+**Found:** 2026-09-30 · **Status:** fixed and verified live (commit `34552a6`, 2026-09-30)
 
 ## Problem
 On `https://coursemind-app.netlify.app` the header stayed on "Starting server…" and the banner "The server is starting. This can take up to a minute." never cleared. Upload and ask stayed disabled. The console filled with "Failed to load resource" errors, one every 3 s.
@@ -24,7 +24,8 @@ Evidence (owner's Chrome, uBlock Origin Lite 2026.926.2202):
 - `backend`: `pytest -q` → 114 passed (health tests run for both paths, GET, HEAD and 503).
 - `frontend`: `npm test` 10/10, `tsc --noEmit` clean, `eslint` clean, `next build` OK.
 - Local preview (static build + local backend): the page called `GET /status` → 200 and the header showed "Connected".
-- Still to do after deploy: end-to-end run in the owner's Chrome with uBlock Origin Lite on.
+- Live, in the owner's Chrome with uBlock Origin Lite on: page load `GET /status` 200 in 251 ms and "Connected"; samples Ready (10 / 25 / 11); PDF upload Ready (2 passages); a typed question across the upload and the samples cited the DOCX (§ 9) and the upload (p. 1); the citation opened the exact passage; an off-topic question got the refusal sentence with no sources; reload kept the library; four deletes returned 204 (Render logs) and the workspace is empty again.
+- Note: the Chrome extension's network log shows blocked and some successful requests as "503"; Render logs are the reliable source.
 
 ## Roll back
 Revert the commit. The frontend goes back to `/health` (broken for ad-blocker users again); the extra backend path is harmless on its own.
