@@ -220,8 +220,9 @@ def test_upload_rate_limit_per_ip(api, pdf, monkeypatch):
 
     assert (limited.status_code, limited.json()["code"]) == (429, "upload_rate_limited")
     assert 3590 <= int(limited.headers["Retry-After"]) <= 3600
-    # Keyed on the first X-Forwarded-For entry (the client, as added by Render's proxy).
-    assert upload(api, "a.pdf", pdf, **{"X-Forwarded-For": "203.0.113.9, 10.0.0.1"}).status_code == 200
+    # A forged X-Forwarded-For doesn't open a new bucket; Cloudflare's CF-Connecting-IP (another client) does.
+    assert upload(api, "a.pdf", pdf, **{"X-Forwarded-For": "203.0.113.9"}).status_code == 429
+    assert upload(api, "a.pdf", pdf, **{"CF-Connecting-IP": "203.0.113.9"}).status_code == 200
 
 
 def test_workspace_full_is_409(api, pdf, monkeypatch):

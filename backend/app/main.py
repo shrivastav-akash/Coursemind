@@ -92,10 +92,11 @@ jobs = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest")  # one fil
 
 
 def client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    # Render sits behind Cloudflare, which sets CF-Connecting-IP to the address that connected to it.
+    # X-Forwarded-For can't be trusted: Render keeps whatever the client sent in front of the entries
+    # its proxies add, so the first entry is forgeable (measured live in step 17). Without the header
+    # (local runs) every request is keyed on the socket address, which only makes limits stricter.
+    return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "unknown")
 
 
 def rate_limit(request: Request, bucket: str, limits: tuple[int, int], code: ErrorCode) -> None:
