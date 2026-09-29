@@ -16,6 +16,15 @@ def test_health(monkeypatch):
     assert response.json() == {"status": "ok"}
 
 
+def test_health_answers_head(monkeypatch):
+    monkeypatch.setattr(store, "ping", lambda: True)
+
+    response = client.head("/health")
+
+    assert response.status_code == 200
+    assert response.content == b""
+
+
 def test_health_is_503_when_qdrant_is_unreachable(monkeypatch):
     monkeypatch.setattr(store, "ping", lambda: False)
 

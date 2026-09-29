@@ -189,7 +189,8 @@ def qdrant_ready() -> None:
         raise ApiError("unavailable") from None
 
 
-@app.get("/health", response_model=Health, responses={503: {"model": ErrorBody}})
+# HEAD too: UptimeRobot's keep-alive monitor checks with HEAD and counted 405 as down.
+@app.api_route("/health", methods=["GET", "HEAD"], response_model=Health, responses={503: {"model": ErrorBody}})
 def health() -> Health:
     if not store.ping():
         raise ApiError("unavailable")
