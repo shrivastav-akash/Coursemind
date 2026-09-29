@@ -8,6 +8,10 @@ __pycache__/
 node_modules/
 .next/
 out/
-# private planning doc (never public, see CONSTRAINTS)
-docs/user/CourseMind_build_plan.md
+# private: specs, planning, process notes and AI-session files (kept locally, not published)
+docs/
+CLAUDE.md
+AGENTS.md
+.claude/
+frontend/README.md
 .CLAUDE.md
