@@ -24,7 +24,7 @@ function HowItWorks() {
   );
 }
 
-// Header indicator for GET /health (APP_FLOW §2); the banner in the thread carries the details.
+// Header indicator for GET /status (APP_FLOW §2); the banner in the thread carries the details.
 function ServerStatus() {
   const { server } = useWorkspace();
   return (

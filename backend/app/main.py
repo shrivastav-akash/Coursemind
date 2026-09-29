@@ -190,7 +190,10 @@ def qdrant_ready() -> None:
 
 
 # HEAD too: UptimeRobot's keep-alive monitor checks with HEAD and counted 405 as down.
+# /status is the browser's path: EasyPrivacy blocks `||onrender.com/health` for scripts, so
+# ad-blocker users never got past "Starting server…". /health stays for Render and UptimeRobot.
 @app.api_route("/health", methods=["GET", "HEAD"], response_model=Health, responses={503: {"model": ErrorBody}})
+@app.api_route("/status", methods=["GET", "HEAD"], response_model=Health, responses={503: {"model": ErrorBody}})
 def health() -> Health:
     if not store.ping():
         raise ApiError("unavailable")

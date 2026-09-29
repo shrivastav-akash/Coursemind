@@ -2,7 +2,7 @@
 
 Living map of the code. **Update this file whenever a folder, module, or connection is added or changes.** Status: `planned` = not built yet, `exists` = in the repo.
 
-_Last updated: 2026-09-29 (step 17: deployed to Render + Netlify; rate limits keyed on `CF-Connecting-IP`)_
+_Last updated: 2026-09-30 (browser health check moved to `/status`; `/health` answers HEAD)_
 
 ## How the pieces connect
 
@@ -34,7 +34,7 @@ Data shapes and endpoint details: [BACKEND_SCHEMA.md](BACKEND_SCHEMA.md). Design
 |---|---|---|
 | `docs/app/` | PRD, TRD, APP_FLOW, UI_UX_BRIEF, BACKEND_SCHEMA, IMPLEMENTATION_PLAN, this file | exists |
 | `docs/user/` | CONSTRAINTS, DECISIONS, HANDOVER; private `CourseMind_build_plan.md` (git-ignored) | exists |
-| `backend/app/main.py` | FastAPI app, CORS, routes, error bodies, rate limiter, job queue | exists: CORS, lifespan (fails without settings, clears `/tmp/coursemind`, then `store.ping()`), error table + handlers, `X-Workspace-Id` and Qdrant-ready dependencies, rate limiter, 1-worker ingest queue, `GET /health`, `GET/POST /documents`, `DELETE /documents/{doc_id}`, `POST /ask` (SSE via `answer_events`), `POST /documents/samples` (adds the files in `backend/samples/` once per workspace; the worker gets a temp copy) |
+| `backend/app/main.py` | FastAPI app, CORS, routes, error bodies, rate limiter, job queue | exists: CORS, lifespan (fails without settings, clears `/tmp/coursemind`, then `store.ping()`), error table + handlers, `X-Workspace-Id` and Qdrant-ready dependencies, rate limiter, 1-worker ingest queue, `GET/HEAD /health` and `/status` (same handler; the browser uses `/status` because ad blockers block `onrender.com/health`), `GET/POST /documents`, `DELETE /documents/{doc_id}`, `POST /ask` (SSE via `answer_events`), `POST /documents/samples` (adds the files in `backend/samples/` once per workspace; the worker gets a temp copy) |
 | `backend/app/config.py` | Env vars, limits, fixed ids, model names | exists |
 | `backend/app/schemas.py` | Pydantic models | exists |
 | `CLAUDE.md` | Tier, doc locations, commands for AI sessions | exists |

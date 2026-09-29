@@ -38,7 +38,8 @@ async function call(path: string, init: RequestInit = {}): Promise<Response> {
 export async function health(): Promise<boolean> {
   try {
     // Short timeout: a sleeping server can hang; the caller retries every 3 s (APP_FLOW §2).
-    const response = await fetch(`${API_URL}/health`, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+    // Not /health: EasyPrivacy (uBlock, AdGuard, Brave) blocks `||onrender.com/health`.
+    const response = await fetch(`${API_URL}/status`, { cache: "no-store", signal: AbortSignal.timeout(5000) });
     return response.ok;
   } catch {
     return false;

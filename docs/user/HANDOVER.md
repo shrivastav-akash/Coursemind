@@ -4,7 +4,7 @@ Filled at the end of every session so the next one starts cold without questions
 
 **Date:** 2026-09-30
 **Step:** 17 — Deploy: **done** (Milestone B is live)
-**Status:** PR #1 merged (`42eb21e`). Uncommitted: doc updates, plus `/health` now answers HEAD (UptimeRobot got 405; DECISIONS 2026-09-30). Tests: 111 passed. Not deployed yet.
+**Status:** `/health` answers HEAD (live since 18:53 UTC 2026-09-29). Uncommitted: the browser's server check moved to `/status` because EasyPrivacy blocks `onrender.com/health` (BUG-health-blocked-by-easyprivacy). Tests: backend 114 passed, frontend 10/10, build OK. Not deployed yet.
 
 ## Live
 - Frontend `https://coursemind-app.netlify.app` (public; previews team-only).
@@ -16,7 +16,7 @@ Filled at the end of every session so the next one starts cold without questions
 - Latency: server-side retrieval 71–86 ms, first answer piece about 0.25 s after the LLM call, full answer 0.9–1.1 s.
 
 ## Pending
-- **Owner:** commit and push the `/health` HEAD fix; Render auto-deploys `main`. After that, `curl -I https://coursemind-api.onrender.com/health` should return 200.
+- **Owner:** commit and push the `/status` fix (backend and frontend in one push; Netlify rebuilds because `frontend/` changed). Then Claude runs the full end-to-end test in the owner's Chrome with uBlock Origin Lite on.
 - Hydration error #418 in the live console: being fixed in a separate session.
 - **Owner:** delete the 3 leftover sample documents (46 chunks, from a lost test workspace)? Claude can do it through the API once approved.
 - A frontend-only env change needs Netlify "Trigger deploy": builds are skipped when `frontend/` didn't change.

@@ -145,7 +145,7 @@ Every HTTP error body is:
 | `storage_full` | upload, samples | 503 | "The demo's storage is full right now…" |
 | `no_ready_documents` | `POST /ask` | 409 | "Add a document before asking." |
 | `ask_rate_limited` | `POST /ask` | 429 + `Retry-After` | "Too many questions in a minute…" |
-| `unavailable` | `GET /health` | 503 | Server banner |
+| `unavailable` | `GET /health`, `GET /status` | 503 | Server banner |
 | `no_text` | document `error_code` | — | "No selectable text found…" |
 | `unreadable` | document `error_code` | — | "Couldn't read this file…" |
 | `interrupted` | document `error_code` | — | "Processing was interrupted by a server restart…" |
@@ -181,18 +181,19 @@ All three reset on restart. `ponytail:` single process only; move to Redis if th
 
 | Method | Path | Auth | Input | Success output |
 |---|---|---|---|---|
-| GET, HEAD | `/health` | None | — | 200 `Health` (HEAD: no body) |
+| GET, HEAD | `/health`, `/status` | None | — | 200 `Health` (HEAD: no body) |
 | GET | `/documents` | Workspace | — | 200 `Document[]` |
 | POST | `/documents` | Workspace | multipart `file` | 202 `Document` (new or re-queued) · 200 `Document` (already present) |
 | DELETE | `/documents/{doc_id}` | Workspace | path `doc_id` | 204 (no body) |
 | POST | `/documents/samples` | Workspace | — | 202 `Document[]` (any new) · 200 `Document[]` (all already present) |
 | POST | `/ask` | Workspace | JSON `AskRequest` | 200 `text/event-stream` |
 
-### `GET /health`
+### `GET /health` and `GET /status`
 - Pings Qdrant (cheap collection lookup).
 - 200 `{"status": "ok"}`; 503 `{"code": "unavailable", "message": "…"}`.
-- Also answers `HEAD` with the same status and no body (UptimeRobot checks with HEAD).
-- Used by: header status, server banner, UptimeRobot.
+- Two paths, one handler. Both also answer `HEAD` with the same status and no body (UptimeRobot checks with HEAD).
+- `/status`: used by the browser (header status, server banner). The EasyPrivacy filter list (uBlock Origin, AdGuard, Brave) blocks `||onrender.com/health` for scripts, so the browser must not call `/health`.
+- `/health`: used by Render's health check and UptimeRobot (server-side, no ad blocker).
 
 ### `GET /documents`
 - Returns every document in the workspace, newest first (`created_at` desc; sorted in Python, ≤ 30 items).
@@ -345,7 +346,7 @@ Every APP_FLOW screen has the data and endpoints it needs.
 
 | Screen | Data it shows | Endpoint / source |
 |---|---|---|
-| S1 Workspace, desktop | Server status, library, thread | `GET /health`, `GET /documents`, `POST /ask` |
+| S1 Workspace, desktop | Server status, library, thread | `GET /status`, `GET /documents`, `POST /ask` |
 | S2 Workspace, mobile | Same as S1; count on "Documents (n)" | same as S1 |
 | S3 Library panel | `Document[]` (name, type, status, `error_code`, chunks, `is_sample`), "n of 30" | `GET /documents` (polled every 2 s while any queued/processing), `POST /documents`, `DELETE /documents/{id}`, `POST /documents/samples`, `lib/limits.ts` |
 | S4 Library sheet | Same as S3 | Same as S3 |
@@ -356,6 +357,6 @@ Every APP_FLOW screen has the data and endpoints it needs.
 | S9 Source passage | `Source` (name, type, location, full text); "since removed" note when `doc_id` not in current library | `sources` event + `GET /documents` |
 | S10 Delete confirmation | Document name | `DELETE /documents/{id}` |
 | S11 Drop overlay | None | Client only, then `POST /documents` |
-| S12 Server status banner | Health result, retry timer | `GET /health` |
+| S12 Server status banner | Health result, retry timer | `GET /status` |
 | S13 Not found page | None | Static `404.html` from Next.js export |
 | Toasts (J2, J3, J7) | Duplicate / samples-present / deleted | `POST /documents` 200, `POST /documents/samples` 200, `DELETE` 204 |

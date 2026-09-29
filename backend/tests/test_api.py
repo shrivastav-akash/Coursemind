@@ -7,28 +7,35 @@ from app.main import app
 client = TestClient(app)  # no `with`: lifespan (Qdrant setup) does not run in offline tests
 
 
-def test_health(monkeypatch):
+# /status is what the browser calls (ad blockers block onrender.com/health); both must match.
+HEALTH_PATHS = ["/health", "/status"]
+
+
+@pytest.mark.parametrize("path", HEALTH_PATHS)
+def test_health(monkeypatch, path):
     monkeypatch.setattr(store, "ping", lambda: True)
 
-    response = client.get("/health")
+    response = client.get(path)
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_health_answers_head(monkeypatch):
+@pytest.mark.parametrize("path", HEALTH_PATHS)
+def test_health_answers_head(monkeypatch, path):
     monkeypatch.setattr(store, "ping", lambda: True)
 
-    response = client.head("/health")
+    response = client.head(path)
 
     assert response.status_code == 200
     assert response.content == b""
 
 
-def test_health_is_503_when_qdrant_is_unreachable(monkeypatch):
+@pytest.mark.parametrize("path", HEALTH_PATHS)
+def test_health_is_503_when_qdrant_is_unreachable(monkeypatch, path):
     monkeypatch.setattr(store, "ping", lambda: False)
 
-    response = client.get("/health")
+    response = client.get(path)
 
     assert response.status_code == 503
     assert response.json()["code"] == "unavailable"

@@ -13,7 +13,7 @@ Browser ── Next.js static site (Netlify CDN)
 FastAPI on Render free (1 process, no ML models loaded)
    ├─ POST /documents ─► temp file ─► 1-worker queue ─► parse (PDF/DOCX/PPTX) ─► chunk ─► upsert text
    ├─ POST /ask ───────► 1 Qdrant query (hybrid: dense + BM25, RRF) ─► prompt ─► Groq (stream) ─► SSE to browser
-   └─ GET /health ─────► ping Qdrant                        ▲
+   └─ GET /health, /status ─► ping Qdrant                   ▲
                                                              │ UptimeRobot every 5 min (keep-alive)
 Qdrant Cloud free cluster (durable)
    ├─ collection "chunks": dense MiniLM + sparse BM25 + ColBERT multivector, computed by Cloud Inference
@@ -199,7 +199,7 @@ All workspace routes require header `X-Workspace-Id: <uuid4>`. Every error body 
 
 | Method | Path | Request | Success | Errors |
 |---|---|---|---|---|
-| GET | `/health` | — | 200 `{"status":"ok"}` (pings Qdrant) | 503 if Qdrant unreachable |
+| GET, HEAD | `/health`, `/status` | — | 200 `{"status":"ok"}` (pings Qdrant). Browser uses `/status` (ad blockers block `onrender.com/health`); Render and UptimeRobot use `/health` | 503 if Qdrant unreachable |
 | POST | `/documents` | multipart `file` | 202 `Document` (new) / 200 `Document` (duplicate) | 400 bad workspace · 409 workspace full · 413 > 25 MB · 415 bad type/signature · 429 rate limit · 503 storage full |
 | GET | `/documents` | — | 200 `Document[]` (newest first) | 400 |
 | DELETE | `/documents/{id}` | — | 204 | 404 · 409 still processing |
@@ -227,7 +227,7 @@ Headers: `Cache-Control: no-cache`, `X-Accel-Buffering: no`. Sync generator insi
 - **Types (`lib/types.ts`):** hand-written mirrors of `Document`, `Source`, and event types (small surface; no codegen).
 - **Library (`components/Library.tsx`):** file input + drag-and-drop (`accept=".pdf,.docx,.pptx"`), client-side type/size pre-check, uploads 2 files at a time, status badges, delete (disabled while processing), "Try sample documents". Polls `GET /documents` every 2 s only while something is queued/processing.
 - **Chat (`components/Chat.tsx`, `Answer.tsx`):** input disabled until ≥ 1 ready doc; streaming answer appended token by token; `[n]` markers rendered as buttons labelled `doc · location` that expand the matching source; source chips list under the answer; new question aborts the previous stream (`AbortController`).
-- **Server status:** `GET /health` on load; if it fails, show "Starting server…" and retry every 3 s.
+- **Server status:** `GET /status` on load (not `/health`: EasyPrivacy blocks `onrender.com/health`); if it fails, show "Starting server…" and retry every 3 s.
 - **Safety/accessibility:** answer text rendered as plain React text (no `dangerouslySetInnerHTML`); answer region `aria-live="polite"` + `aria-busy` while streaming; chips are `<button aria-expanded aria-controls>`; all controls keyboard reachable and labelled.
 
 ### 11. Evaluation design

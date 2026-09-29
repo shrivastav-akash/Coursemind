@@ -576,3 +576,8 @@ Before the fix, mobile gzip was 94 with LCP 3.0 s. The uncompressed python serve
 **Decision:** `/health` accepts `GET` and `HEAD` (`@app.api_route(..., methods=["GET", "HEAD"])`). HEAD returns the same status with no body. Test: `test_health_answers_head`. BACKEND_SCHEMA (endpoint summary and `/health` section) updated with the owner's approval.
 **Alternatives:** switch the UptimeRobot monitor to GET (a dashboard setting outside the repo, easy to lose on a new monitor).
 **Also found:** a "Starting server…" banner reported by the owner was not a cold start. The instance had not restarted, and no request from the owner's browser reached the backend at that time; a clean browser connected in 0.37 s. Likely a browser extension, VPN or network issue on the client.
+
+## 2026-09-30 — Browser server check uses `/status` (owner approved)
+**Context:** the live app stayed on "Starting server…" in the owner's Chrome. uBlock Origin Lite's EasyPrivacy list blocks `||onrender.com/health` for scripts, so every `GET /health` from the page failed in about 2 ms without reaching Render. Any visitor with uBlock Origin, AdGuard or Brave would see the same. Details: `docs/bugs/BUG-health-blocked-by-easyprivacy.md`.
+**Decision:** the health handler answers on `/health` and `/status` (GET and HEAD). The frontend calls `/status`. `/health` stays for Render's health check and UptimeRobot, which run server-side where no ad blocker applies. BACKEND_SCHEMA, TRD and APP_FLOW updated with the owner's approval.
+**Alternatives:** allow the site in the owner's uBlock (fixes only the owner); rename `/health` outright (needs Render and UptimeRobot changes for no gain); a custom API domain (costs money).

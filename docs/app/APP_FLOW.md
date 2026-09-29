@@ -42,8 +42,8 @@ These run underneath every journey.
 
 | State | Trigger | What the user sees |
 |---|---|---|
-| Ready | `GET /health` returns 200 | Header shows "Connected". No banner. |
-| Starting | `/health` fails or times out | Header shows "Starting server…". Banner: "The server is starting. This can take up to a minute." App retries every 3 s. Upload and ask are disabled with that reason. |
+| Ready | `GET /status` returns 200 | Header shows "Connected". No banner. |
+| Starting | `/status` fails or times out | Header shows "Starting server…". Banner: "The server is starting. This can take up to a minute." App retries every 3 s. Upload and ask are disabled with that reason. |
 | Unreachable | Still failing after 90 s | Banner: "Can't reach the server. Check your connection, then try again." Button: "Try again". |
 
 The keep-alive monitor (TRD §12) means "Starting" should only appear right after a redeploy.
@@ -184,10 +184,10 @@ Precondition: at least one Ready document.
 
 1. Right after a redeploy, the first visitor may see header "Starting server…" and the S12 banner.
 2. Upload and ask controls are disabled with the reason on hover/focus.
-3. The app retries `/health` every 3 s. When it succeeds, the banner disappears, header shows "Connected", and controls unlock without a reload.
+3. The app retries `/status` every 3 s. When it succeeds, the banner disappears, header shows "Connected", and controls unlock without a reload.
 
 - **If** it still fails after 90 s: banner switches to "Can't reach the server. Check your connection, then try again." with **Try again**.
-- **If** the backend is up but the vector store is down (`/health` 503): same banner; asking and uploading stay disabled.
+- **If** the backend is up but the vector store is down (`/status` 503): same banner; asking and uploading stay disabled.
 
 ### J10 — Limits in one place
 

@@ -161,7 +161,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [recheck],
   );
 
-  // quiet: an early fetch made before /health answers; its failure is the health loop's to report.
+  // quiet: an early fetch made before /status answers; its failure is the health loop's to report.
   const refresh = useCallback(async (quiet = false) => {
     try {
       const next = await api.listDocuments();
@@ -189,8 +189,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, [serverGone]);
 
   // First paint without waiting on the network (Lighthouse: the first-visit text was the LCP
-  // element, held back by /health then /documents). A returning visit fetches its library
-  // alongside /health instead of after it.
+  // element, held back by /status then /documents). A returning visit fetches its library
+  // alongside /status instead of after it.
   const firstVisit = useSyncExternalStore(neverChanges, () => FIRST_VISIT, () => true);
   useEffect(() => {
     if (!FIRST_VISIT) void refresh(true);
