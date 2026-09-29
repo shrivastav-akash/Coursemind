@@ -2,7 +2,7 @@
 
 Living map of the code. **Update this file whenever a folder, module, or connection is added or changes.** Status: `planned` = not built yet, `exists` = in the repo.
 
-_Last updated: 2026-09-27 (step 16: evaluation and tuning)_
+_Last updated: 2026-09-29 (step 17: deployed to Render + Netlify; rate limits keyed on `CF-Connecting-IP`)_
 
 ## How the pieces connect
 

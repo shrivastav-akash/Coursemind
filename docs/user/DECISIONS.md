@@ -547,3 +547,26 @@ Before the fix, mobile gzip was 94 with LCP 3.0 s. The uncompressed python serve
 - Logs hold ids, counts and timings only.
 - Test documents deleted.
 
+## 2026-09-29 — Deploy verification, part 2 (step 17 done)
+**Deployed:** PR #1 (`42eb21e`). Render has been live since 17:03 UTC. Netlify was rebuilt by a manual trigger.
+
+**Verified live:**
+- **Rate limits (fixed).** Six `/ask` calls forging `X-Forwarded-For` and `True-Client-IP`: the 6th got 429.
+  - A client-supplied `CF-Connecting-IP` is refused by Cloudflare itself (403, error 1000), so that header can't be forged.
+- **Frontend.** The Netlify bundle now contains the Render URL, and the header shows "Connected".
+- **Done-when, in a fresh browser on `https://coursemind-app.netlify.app`:**
+  - "Try sample documents": 3 Ready (10 / 25 / 11).
+  - A PDF uploaded through the page's own file input: Ready, 2 passages.
+  - A typed question spanning the upload and the samples: answer cited `OS_Deadlocks, p. 1`, the slides (slide 8) and DOCX § 9, with inline code in mono.
+  - The citation opens its source with the exact passage in the evidence style.
+  - "TCP vs UDP": the exact refusal sentence and the rephrasing hint, no sources.
+- **UptimeRobot:** set up by the owner. The service stayed awake more than 2 hours after the last manual request, which free services only do with outside traffic.
+
+**Notes:**
+- **Netlify skips builds when nothing under `frontend/` changed** (its default with a base directory). A backend-only merge doesn't rebuild the site, so an environment-variable change needs "Trigger deploy". Kept as is.
+- **Browser-pane artefacts, not app bugs:**
+  - screenshots can lag behind the page;
+  - one question was sent twice by the test itself;
+  - off-screen thread items use `content-visibility: auto`, so their `innerText` is empty.
+- **Test data:** my test workspace was deleted. Three sample documents (46 chunks) remain from a browser session that lost its workspace id. They are left for the owner to decide, because deleting production data needs approval.
+

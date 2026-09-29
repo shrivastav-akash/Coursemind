@@ -2,36 +2,23 @@
 
 Filled at the end of every session so the next one starts cold without questions. Replace the contents each time; git history keeps the old ones.
 
-**Date:** 2026-09-28
-**Step:** 17 — Deploy (live; verification part 1 done, part 2 waits on one push)
-**Status:** `7969e15` is deployed. Uncommitted: the rate-limit key fix (`CF-Connecting-IP`), its test, and docs.
+**Date:** 2026-09-29
+**Step:** 17 — Deploy: **done** (Milestone B is live)
+**Status:** PR #1 merged (`42eb21e`). Uncommitted: these doc updates only.
 
 ## Live
-- Backend `https://coursemind-api.onrender.com` (Render, Oregon, free). `/health` is 200.
-- Frontend `https://coursemind-app.netlify.app` (Netlify). Now public; previews stay team-only.
+- Frontend `https://coursemind-app.netlify.app` (public; previews team-only).
+- Backend `https://coursemind-api.onrender.com` (Render, Oregon, free; UptimeRobot every 5 min).
 
-## Verified (see DECISIONS, 2026-09-28)
-- API end to end: samples, upload, cross-document answer with citations, refusal.
-- Latency: server-side retrieval 71–86 ms; full answer 0.9–1.1 s.
-- CORS locked to the Netlify origin.
+## Verified (DECISIONS, 2026-09-28 and 2026-09-29)
+- Fresh browser: samples, upload through the UI, cross-document answer citing the upload and the samples, citation opens the evidence, refusal.
+- Rate limits hold against forged headers (429 on the 6th call); CORS is locked to the Netlify origin.
+- Latency: server-side retrieval 71–86 ms, first answer piece about 0.25 s after the LLM call, full answer 0.9–1.1 s.
 
-## Fixed, not yet deployed
-- Rate limits keyed on `CF-Connecting-IP`, because a forged `X-Forwarded-For` bypassed them live.
-- Netlify `NEXT_PUBLIC_API_URL` re-added. The live build still calls `localhost:8000` until the next build.
-
-## Owner actions
-1. Commit and push the fix. Both Render and Netlify auto-deploy from `main`, and that push also rebuilds Netlify with the API URL.
-2. Confirm the UptimeRobot monitor on `https://coursemind-api.onrender.com/health` (every 5 min).
-
-## Then Claude verifies (part 2)
-- The forged-header rate-limit test gives 429 on the 6th call.
-- In a fresh browser on the Netlify site: samples, upload, cross-document answer, citation, refusal.
-- UptimeRobot is green.
-
-## Known issues / risks
-- Render free hours are shared with WhatHotel and attendify-backend (owner accepted the risk).
-- httpx INFO logs print the Qdrant host on every call (host only, no key). They are noisy; lower the level if wanted.
-- Small eval corpus; Firefox has no `field-sizing: content`.
+## Pending
+- **Owner:** delete the 3 leftover sample documents (46 chunks, from a lost test workspace)? Claude can do it through the API once approved.
+- A frontend-only env change needs Netlify "Trigger deploy": builds are skipped when `frontend/` didn't change.
+- The Render free-hours risk is shared with WhatHotel and attendify-backend (owner accepted).
 
 ## Next step
-- Finish step 17 part 2, then step 18 (README and results).
+- Step 18 — README and results: pitch, screenshot/GIF, architecture diagram, eval table from `eval/results.md`, the measured latency above (plus a 50-page ingest measurement), running locally, limits, and "don't upload private documents"; tick PRD §10 metrics with real numbers.
