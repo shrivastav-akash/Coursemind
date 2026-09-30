@@ -15,3 +15,5 @@ AGENTS.md
 .claude/
 frontend/README.md
 .CLAUDE.md
+# launch-video build output (the finished video is copied to assets/)
+brag-output*/

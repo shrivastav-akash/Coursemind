@@ -4,7 +4,9 @@ Ask questions across your PDF, Word and PowerPoint course notes and get answers 
 
 **Live demo:** https://coursemind-app.netlify.app (no sign-up; click "Try sample documents" to start)
 
-![CourseMind answering a question from two documents: each claim is cited to a page or section, and the sources are listed below the answer](assets/screenshot.png)
+[![22-second demo: a question over three Git study files gets an answer cited to a page and a Word section, clicking a citation opens the exact passage, and an off-topic question gets "I couldn't find that in your notes."](assets/demo.gif)](assets/demo.mp4)
+
+[Download the 22-second video with sound](assets/demo.mp4) (MP4, 2.7 MB).
 
 > **Don't upload private documents.** There are no accounts. Your library is tied to a random id stored in your browser, and the demo runs on shared free-tier services.
 
@@ -15,6 +17,8 @@ Ask questions across your PDF, Word and PowerPoint course notes and get answers 
 - **Check the source.** Clicking a citation opens the exact passage the answer came from.
 - **Across documents.** One question can pull from several files, and the answer cites each of them.
 - **Refuses instead of guessing.** If your notes don't cover the question, the answer is "I couldn't find that in your notes."
+
+![CourseMind answering a question from two documents: each claim is cited to a page or section, and the sources are listed below the answer](assets/screenshot.png)
 
 ## How it works
 
@@ -144,6 +148,7 @@ frontend/
   app/        Next.js pages and global styles
   components/ workspace, library, thread, answer and citation UI
   lib/        typed API client with the SSE reader, answer parser, limits
+assets/       README demo (GIF and MP4) and screenshot
 render.yaml   Render blueprint (backend)
 netlify.toml  Netlify build (frontend)
 ```
