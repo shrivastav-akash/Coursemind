@@ -64,6 +64,9 @@ def test_prompt_numbers_sources_and_uses_the_exact_refusal():
 
     assert system[0] == "system" and f"reply exactly: {config.REFUSAL}" in system[1]
     assert "answer that part and say which part your notes don't cover" in system[1]  # no all-or-nothing refusal
+    # Without a worked [n] example and the number-only rule, gpt-oss-20b dropped markers in 12% of answers.
+    assert "like this: 3NF removes transitive dependencies [2]." in system[1]
+    assert "Refer to sources only by number, never by name" in system[1]
     assert human == ("human", "Sources:\n[1] (DBMS.pptx, slide 4)\n3NF removes transitive dependencies.\n\n"
                               "[2] (OS_Lecture3.pdf, p. 12)\nDeadlock needs four conditions.\n\nQuestion: What is 3NF?")
 

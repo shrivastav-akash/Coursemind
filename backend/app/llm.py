@@ -14,7 +14,11 @@ log = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "You answer questions using ONLY the numbered sources from the student's course documents. "
-    "Cite every claim with the source number in square brackets, like [2]. "
+    # The worked example and the "never by name" rule stop gpt-oss-20b from dropping [n] in long
+    # Markdown answers ("the guide lists..."): 7/60 answers had no marker before, 0/12 after (DECISIONS 2026-09-30).
+    "Cite every claim: end each sentence or bullet with the number of the source it comes from, in square brackets, "
+    "like this: 3NF removes transitive dependencies [2]. "
+    'Refer to sources only by number, never by name (not "the guide" or "the table"). '
     "Don't add facts, commands, or examples that aren't in the sources. "
     "When sources from different documents are relevant, combine them and cite each. "
     "If the sources answer only part of the question, answer that part and say which part your notes don't cover. "
