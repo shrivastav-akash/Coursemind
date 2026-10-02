@@ -29,12 +29,13 @@ const RETURNING_SCRIPT = `try{if(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    // The script above adds data-returning before hydration, so React must not flag it.
+    // The script below adds data-returning before hydration, so React must not flag it.
     <html lang="en" className={cn("h-full antialiased", sans.variable, mono.variable)} suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: RETURNING_SCRIPT }} />
-      </head>
       <body className="h-full">
+        {/* In <body>, not <head>: Netlify injects "\n<!-- … -->" into <head>, and React's head hydration
+            stops at that text node before reaching a script there (React error #418). Still runs before
+            any content below it is painted. */}
+        <script dangerouslySetInnerHTML={{ __html: RETURNING_SCRIPT }} />
         <TooltipProvider>
           <Toaster>{children}</Toaster>
         </TooltipProvider>

@@ -195,6 +195,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!FIRST_VISIT) void refresh(true);
   }, [refresh]);
+  // The returning-visit hiding only covers the wait for the library: an empty one still shows S5.
+  // Keyed on the fetch result, not the exposed state, which reads "loaded" during hydration.
+  useEffect(() => {
+    if (libraryState !== "loading") delete document.documentElement.dataset.returning;
+  }, [libraryState]);
 
   useEffect(() => {
     if (server === "ready") void refresh();
