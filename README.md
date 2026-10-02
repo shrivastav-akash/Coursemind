@@ -71,6 +71,17 @@ Measured on the live deployment from a laptop in India to the backend in Oregon,
 
 The 50-page PDF was generated text (about 2,500 characters per page, 233 chunks), so it measures the pipeline, not a particular course file.
 
+### Page performance
+
+Lighthouse 13.5 on the live site, run on 2026-10-02 from India. Each run used a fresh browser profile, so it measured a first visit. The figures are the median of 3 runs, with the range in brackets.
+
+| | Performance | Accessibility | Best practices | SEO | LCP | CLS | TBT |
+|---|---|---|---|---|---|---|---|
+| Mobile (simulated slow 4G, 4× CPU slowdown) | 98 (97–98) | 100 | 100 | 100 | 1.9 s (1.7–2.0 s) | 0.003 | 100 ms |
+| Desktop | 97 (97–99) | 100 | 100 | 100 | 1.0 s (0.8–1.0 s) | 0.001 | 0 ms |
+
+The page is prerendered as a static export, so the first-visit text is in the HTML before any JavaScript runs. LCP splits into the time to first byte (0.4–1.2 s over the real network) and the render delay (0.4–0.6 s).
+
 ## Tech stack
 
 | Part | Choice |
